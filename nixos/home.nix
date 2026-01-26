@@ -9,6 +9,7 @@
     vim = "nvim";
     vi = "nvim";
     v = "nvim";
+    clear = "fastfetch -l small && clear";
   };
 
   home.packages = with pkgs; [
@@ -21,7 +22,11 @@
     gcc
   ];
 
-  programs.bash.enable = true;
+  programs.bash = {
+    enable = true;
+
+    initExtra = "clear";
+  };
 
   programs.git = {
     enable = true;
