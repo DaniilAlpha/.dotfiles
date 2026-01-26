@@ -11,6 +11,16 @@
     v = "nvim";
   };
 
+  home.packages = with pkgs; [
+    neovim
+    ripgrep
+    nil
+    nixpkgs-fmt
+
+    nodejs
+    gcc
+  ];
+
   programs.bash.enable = true;
 
   programs.git = {
@@ -21,14 +31,8 @@
       user.email = "daniilmiskevich@gmail.com";
     };
   };
-  
-  home.packages = with pkgs; [
-    neovim
-    ripgrep
-    nil
-    nixpkgs-fmt
 
-    nodejs
-    gcc
-  ];
+  programs.qutebrowser = {
+    enable = true;
+  };
 }
