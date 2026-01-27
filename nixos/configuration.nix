@@ -1,11 +1,16 @@
-{ config, lib, pkgs, modulesPath, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  modulesPath,
+  ...
+}:
 
 {
-  imports = 
-    [ (modulesPath + "/profiles/all-hardware.nix")
-      /etc/nixos/hardware-configuration.nix
-    ];
-
+  imports = [
+    (modulesPath + "/profiles/all-hardware.nix")
+    /etc/nixos/hardware-configuration.nix
+  ];
 
   # bootloader
   boot.loader.systemd-boot = {
@@ -35,11 +40,15 @@
     # useXkbConfig = true; # use xkb.options in tty.
   };
 
-  environment.shellAliases = let flakePath = /home/daniil/.dotfiles/nixos; in {
-    q = "exit";
-    nr-switch = "sudo nixos-rebuild switch --flake ${flakePath} --impure";
-    nr-boot = "sudo nixos-rebuild boot --flake ${flakePath} --impure";
-  };
+  environment.shellAliases =
+    let
+      flakePath = "/home/daniil/.dotfiles/nixos";
+    in
+    {
+      q = "exit";
+      nr-switch = "sudo nixos-rebuild switch --flake ${flakePath} --impure";
+      nr-boot = "sudo nixos-rebuild boot --flake ${flakePath} --impure";
+    };
 
   # Enable the X11 windowing system.
   #services.xserver = {
@@ -61,9 +70,11 @@
     wayland.enable = true;
   };
   services.desktopManager.plasma6.enable = true;
-  environment.plasma6.excludePackages = with pkgs; [ 
-    kdePackages.baloo 
+  environment.plasma6.excludePackages = with pkgs; [
+    kdePackages.baloo
   ];
+
+  # services.auto-cpufreq.enable = true;
 
   # Enable CUPS to print documents.
   # services.printing.enable = true;
@@ -73,9 +84,8 @@
 
   users.users.daniil = {
     isNormalUser = true;
-    extraGroups = [ "wheel" ]; 
+    extraGroups = [ "wheel" ];
   };
-
 
   # List packages installed in system profile.
   # You can use https://search.nixos.org/ to find more packages (and options).
@@ -89,6 +99,7 @@
     tmux
     wget
     ripgrep
+    fd
 
     mc
     vim
@@ -109,7 +120,9 @@
     config.init.defaultBranch = "master";
   };
 
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
   system.stateVersion = "25.11"; # DO NOT TOUCH THIS
 }
-

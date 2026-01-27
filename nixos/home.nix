@@ -13,18 +13,23 @@
   home.packages = with pkgs; [
     nodejs
     gcc
+    libclang
 
     telegram-desktop
 
     qalculate-qt
 
-    libreoffice-qt-fresh 
-    hunspell hunspellDicts.en_US hunspellDicts.ru_RU
+    libreoffice-qt-fresh
+    hunspell
+    hunspellDicts.en_US
+    hunspellDicts.ru_RU
 
-    gimp 
+    gimp
     imagemagick
 
   ];
+
+  xdg.enable = true;
 
   programs.bash = {
     enable = true;
@@ -42,24 +47,26 @@
   };
 
   programs.neovim = {
-    enable= true;
+    enable = true;
 
     defaultEditor = true;
     vimAlias = true;
     viAlias = true;
     #vimdiffAlias = true;
     extraPackages = with pkgs; [
-      nil nixpkgs-fmt
-      clangd 
+      nil
+      nixpkgs-fmt
     ];
   };
-  xdg.configFile."nvim".source = config.home.homeDirectory + "/.dotfiles/nvim";
+  xdg.configFile."nvim".source = config.lib.file.mkOutOfStoreSymlink (
+    config.home.homeDirectory + "/.dotfiles/nvim"
+  );
 
   programs.qutebrowser = {
     enable = true;
   };
 
   programs.chromium = {
-    enable=true;
+    enable = true;
   };
 }
