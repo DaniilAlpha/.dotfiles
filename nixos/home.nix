@@ -9,7 +9,7 @@
     vim = "nvim";
     vi = "nvim";
     v = "nvim";
-    clear = "fastfetch -l small && clear";
+    clear = "clear && fastfetch -l nixos_old_small";
   };
 
   home.packages = with pkgs; [
