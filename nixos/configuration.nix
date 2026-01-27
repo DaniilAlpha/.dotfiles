@@ -56,32 +56,17 @@
   #};
 
   #services.displayManager.ly.enable = true;
-
   services.displayManager.sddm = {
     enable = true;
-
-    settings = {
-      General.DisplayServer = "wayland";
-    };
+    wayland.enable = true;
   };
-  services.desktopManager.plasma6 = {
-    enable = true;
-
-    excludePackages = with pkgs; [ 
-      kdePackages.baloo 
-    ];
-  };
+  services.desktopManager.plasma6.enable = true;
+  environment.plasma6.excludePackages = with pkgs; [ 
+    kdePackages.baloo 
+  ];
 
   # Enable CUPS to print documents.
   # services.printing.enable = true;
-
-  # Enable sound.
-  # services.pulseaudio.enable = true;
-  # OR
-  # services.pipewire = {
-  #   enable = true;
-  #   pulse.enable = true;
-  # };
 
   # Enable touchpad support (enabled default in most desktopManager).
   # services.libinput.enable = true;
@@ -103,6 +88,7 @@
     pstree
     tmux
     wget
+    ripgrep
 
     mc
     vim

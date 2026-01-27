@@ -11,15 +11,19 @@
   };
 
   home.packages = with pkgs; [
-    ripgrep 
-
     nodejs
     gcc
+
+    telegram-desktop
+
+    qalculate-qt
 
     libreoffice-qt-fresh 
     hunspell hunspellDicts.en_US hunspellDicts.ru_RU
 
-    qalculate-qt
+    gimp 
+    imagemagick
+
   ];
 
   programs.bash = {
