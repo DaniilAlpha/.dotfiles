@@ -46,6 +46,7 @@
     #vimdiffAlias = true;
     extraPackages = with pkgs; [
       nil nixpkgs-fmt
+      clangd 
     ];
   };
   xdg.configFile."nvim".source = config.home.homeDirectory + "/.dotfiles/nvim";

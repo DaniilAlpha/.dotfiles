@@ -8,7 +8,12 @@
 
 
   # bootloader
-  boot.loader.systemd-boot.enable = true;
+  boot.loader.systemd-boot = {
+    enable = true;
+    memtest86.enable = true;
+
+    consoleMode = "auto"; # or "max"?
+  };
   boot.loader.efi.canTouchEfiVariables = false;
 
   # kernel
@@ -51,6 +56,7 @@
   #};
 
   #services.displayManager.ly.enable = true;
+
   services.displayManager.sddm = {
     enable = true;
 
@@ -60,6 +66,10 @@
   };
   services.desktopManager.plasma6 = {
     enable = true;
+
+    excludePackages = with pkgs; [ 
+      kdePackages.baloo 
+    ];
   };
 
   # Enable CUPS to print documents.
@@ -109,11 +119,11 @@
 
   programs.git = {
     enable = true;
+
     config.init.defaultBranch = "master";
   };
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
-
   system.stateVersion = "25.11"; # DO NOT TOUCH THIS
 }
 
