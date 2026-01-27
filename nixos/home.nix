@@ -6,20 +6,20 @@
   home.stateVersion = "25.11";
 
   home.shellAliases = {
-    vim = "nvim";
-    vi = "nvim";
-    v = "nvim";
+    v = "vi";
     clear = "clear && fastfetch -l nixos_old_small";
   };
 
   home.packages = with pkgs; [
-    neovim
-    ripgrep
-    nil
-    nixpkgs-fmt
+    ripgrep 
 
     nodejs
     gcc
+
+    libreoffice-qt-fresh 
+    hunspell hunspellDicts.en_US hunspellDicts.ru_RU
+
+    qalculate-qt
   ];
 
   programs.bash = {
@@ -36,6 +36,19 @@
       user.email = "daniilmiskevich@gmail.com";
     };
   };
+
+  programs.neovim = {
+    enable= true;
+
+    defaultEditor = true;
+    vimAlias = true;
+    viAlias = true;
+    #vimdiffAlias = true;
+    extraPackages = with pkgs; [
+      nil nixpkgs-fmt
+    ];
+  };
+  xdg.configFile."nvim".source = config.home.homeDirectory + "/.dotfiles/nvim";
 
   programs.qutebrowser = {
     enable = true;

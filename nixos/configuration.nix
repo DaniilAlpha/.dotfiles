@@ -30,7 +30,7 @@
     # useXkbConfig = true; # use xkb.options in tty.
   };
 
-  environment.shellAliases = let flakePath = "/home/daniil/.dotfiles/nixos/"; in {
+  environment.shellAliases = let flakePath = /home/daniil/.dotfiles/nixos; in {
     q = "exit";
     nr-switch = "sudo nixos-rebuild switch --flake ${flakePath} --impure";
     nr-boot = "sudo nixos-rebuild boot --flake ${flakePath} --impure";
@@ -79,35 +79,38 @@
   users.users.daniil = {
     isNormalUser = true;
     extraGroups = [ "wheel" ]; 
-    packages = with pkgs; [
-    ];
   };
 
-  programs.git = {
-    enable = true;
-    config.init.defaultBranch = "master";
-  };
 
   # List packages installed in system profile.
   # You can use https://search.nixos.org/ to find more packages (and options).
   environment.systemPackages = with pkgs; [
+    ntfs3g
+    wineWowPackages.stable
+    winetricks
+
     tree
+    pstree
     tmux
     wget
 
     mc
+    vim
     btop
     alacritty
 
     fastfetch
     pipes
-
-    vim
   ];
 
   fonts.packages = with pkgs; [
     nerd-fonts.jetbrains-mono
   ];
+
+  programs.git = {
+    enable = true;
+    config.init.defaultBranch = "master";
+  };
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
