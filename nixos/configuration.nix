@@ -12,6 +12,8 @@
     /etc/nixos/hardware-configuration.nix
   ];
 
+  nixpkgs.config.allowUnfree = true;
+
   # bootloader
   boot.loader.systemd-boot = {
     enable = true;
@@ -21,10 +23,14 @@
   };
   boot.loader.efi.canTouchEfiVariables = false;
 
-  # kernel
+  # core system
   boot.kernelPackages = pkgs.linuxPackages_latest;
-
   networking.hostName = "magnesium";
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 14d";
+  };
 
   # networking
   networking.networkmanager.enable = true;
@@ -100,11 +106,17 @@
     wget
     ripgrep
     fd
+    fzf
 
     mc
     vim
     btop
     alacritty
+
+    zip
+    unzip
+    p7zip
+    unrar
 
     fastfetch
     pipes

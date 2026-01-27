@@ -53,10 +53,15 @@
     vimAlias = true;
     viAlias = true;
     #vimdiffAlias = true;
+    plugins = with pkgs; [
+      vimPlugins.nvim-treesitter
+      vimPlugins.nvim-treesitter.withAllGrammars
+    ];
     extraPackages = with pkgs; [
       nil
       nixpkgs-fmt
     ];
+
   };
   xdg.configFile."nvim".source = config.lib.file.mkOutOfStoreSymlink (
     config.home.homeDirectory + "/.dotfiles/nvim"
