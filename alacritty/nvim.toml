@@ -5,7 +5,7 @@ import = ["~/.config/alacritty/alacritty.toml"]
 class.general = "nvim"
 title = "Neovim"
 dynamic_title = false
-dimensions = { columns = 100, lines = 50 }
+dimensions = { columns = 100, lines = 30 }
 dynamic_padding = true
 opacity = 1.0
 blur = false

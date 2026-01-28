@@ -14,6 +14,8 @@
     nodejs
     gcc
     libclang
+    gnumake
+    cmake
 
     telegram-desktop
 
@@ -57,11 +59,14 @@
     vimAlias = true;
     viAlias = true;
     #vimdiffAlias = true;
-    plugins = with pkgs; [
-      vimPlugins.nvim-treesitter
-      vimPlugins.nvim-treesitter.withAllGrammars
+    plugins = with pkgs.vimPlugins; [
+      lazy-nvim
+      telescope-nvim
+      nvim-treesitter
+      nvim-treesitter.withAllGrammars
     ];
     extraPackages = with pkgs; [
+      vimPlugins.telescope-fzf-native-nvim
       nil
       nixpkgs-fmt
     ];
@@ -70,6 +75,15 @@
   xdg.configFile."nvim".source = config.lib.file.mkOutOfStoreSymlink (
     config.home.homeDirectory + "/.dotfiles/nvim"
   );
+  xdg.desktopEntries."nvim" = {
+    name = "Neovim";
+    icon = "nvim";
+    exec =
+      "alacritty --config-file "
+      + config.home.homeDirectory
+      + "/.config/alacritty/nvim.toml"
+      + " -e nvim %F";
+  };
 
   programs.qutebrowser.enable = true;
   programs.chromium.enable = true;
