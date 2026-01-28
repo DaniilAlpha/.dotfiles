@@ -1,0 +1,22 @@
+[general]
+import = ["~/.config/alacritty/themes/everforest-dark.toml"]
+
+[window]
+# dynamic_padding = true
+dimensions = { columns = 80, lines = 25 }
+# opacity = 0.85
+# blur = true
+
+[font]
+normal.family = "JetBrainsMono NerdFont" 
+size = 10
+builtin_box_drawing = false
+
+[scrolling]
+multiplier = 1
+
+[bell]
+animation = "Ease"
+duration = 20
+color = "#222222"
+# command = { program = "pw-play", args = ["/usr/share/sounds/ocean/stereo/bell.oga", "--volume=0.4"]}

@@ -108,6 +108,7 @@
     fd
     fzf
 
+    alacritty
     mc
     vim
     btop

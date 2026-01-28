@@ -7,7 +7,7 @@
 
   home.shellAliases = {
     v = "vi";
-    clear = "clear && fastfetch -l nixos_old_small";
+    clear = "clear && fastfetch -l nixos_old_small -c ~/.config/fastfetch/minimal.jsonc";
   };
 
   home.packages = with pkgs; [
@@ -26,7 +26,6 @@
 
     gimp
     imagemagick
-
   ];
 
   xdg.enable = true;
@@ -46,35 +45,10 @@
     };
   };
 
-  programs.alacritty = {
-    enable = true;
-
-    theme = "everforest_dark";
-    settings = {
-      window = {
-        dimensions = {
-          columns = 80;
-          lines = 25;
-        };
-        # opacity = 0.85;
-        # blur = true;
-      };
-
-      font = {
-        normal.family = "JetBrainsMono NerdFont";
-        size = 10;
-        builtin_box_drawing = false;
-      };
-
-      scrolling.multiplier = 1;
-
-      bell = {
-        animation = "Ease";
-        duration = 20;
-        color = "#222222";
-      };
-    };
-  };
+  programs.alacritty.enable = true;
+  xdg.configFile."alacritty".source = config.lib.file.mkOutOfStoreSymlink (
+    config.home.homeDirectory + "/.dotfiles/alacritty"
+  );
 
   programs.neovim = {
     enable = true;
@@ -97,11 +71,11 @@
     config.home.homeDirectory + "/.dotfiles/nvim"
   );
 
-  programs.qutebrowser = {
-    enable = true;
-  };
+  programs.qutebrowser.enable = true;
+  programs.chromium.enable = true;
 
-  programs.chromium = {
-    enable = true;
-  };
+  programs.fastfetch.enable = true;
+  xdg.configFile."fastfetch".source = config.lib.file.mkOutOfStoreSymlink (
+    config.home.homeDirectory + "/.dotfiles/fastfetch"
+  );
 }

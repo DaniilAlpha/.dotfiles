@@ -1,0 +1,9 @@
+[general]
+import = ["~/.config/alacritty/alacritty.toml"]
+
+[window]
+class.general = "mc"
+title = "Midnight Commander"
+dynamic_title = false
+dimensions = { columns = 120, lines = 40 }
+dynamic_padding = true
