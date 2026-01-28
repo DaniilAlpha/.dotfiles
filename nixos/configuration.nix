@@ -111,7 +111,6 @@
     mc
     vim
     btop
-    alacritty
 
     zip
     unzip

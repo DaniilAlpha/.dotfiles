@@ -46,6 +46,36 @@
     };
   };
 
+  programs.alacritty = {
+    enable = true;
+
+    theme = "everforest_dark";
+    settings = {
+      window = {
+        dimensions = {
+          columns = 80;
+          lines = 25;
+        };
+        # opacity = 0.85;
+        # blur = true;
+      };
+
+      font = {
+        normal.family = "JetBrainsMono NerdFont";
+        size = 10;
+        builtin_box_drawing = false;
+      };
+
+      scrolling.multiplier = 1;
+
+      bell = {
+        animation = "Ease";
+        duration = 20;
+        color = "#222222";
+      };
+    };
+  };
+
   programs.neovim = {
     enable = true;
 
