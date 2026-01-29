@@ -126,6 +126,11 @@
     nerd-fonts.jetbrains-mono
   ];
 
+  programs.appimage = {
+    enable = true;
+    binfmt = true;
+  };
+
   programs.git = {
     enable = true;
 
