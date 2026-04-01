@@ -1,0 +1,54 @@
+[global]
+
+timeout = 8
+
+### sizes ###
+
+follow = mouse
+origin = bottom-right
+offset = 6x26
+gap_size = 0
+notification_limit = 5
+height = 100
+width = 300
+progress_bar_height = 6
+
+
+### look & feel ###
+
+font = sans-serif 8
+
+# colors
+background = "#404552"
+foreground = "#D3DAE3"
+highlight = "#5294E2"
+
+# icons
+icon_theme = "Papirus-Dark"
+enable_recursive_icon_lookup = true
+#default_icon = bell
+icon_position = right
+max_icon_size = 32
+
+# frame
+frame_color = "#262B36"
+frame_width = 1
+corner_radius = 2
+progress_bar_frame_width = 0
+progress_bar_corner_radius = 999
+
+
+[urgency_low]
+
+timeout = 4
+
+background = "#383C4A"
+foreground = "#A7A7A7"
+
+
+[urgency_critical]
+
+timeout = 0
+
+background = "#F27835"
+foreground = "#FFFFFF"

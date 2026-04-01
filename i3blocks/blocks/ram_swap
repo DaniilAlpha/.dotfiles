@@ -1,0 +1,6 @@
+#!/bin/bash
+
+while true; do
+	echo "$(free -h | awk '/^Mem:/ {print $3}') / <span size='small'>$(free -h | awk '/^Swap:/ {print $3}')</span>"
+	sleep 10
+done

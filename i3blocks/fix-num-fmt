@@ -1,0 +1,3 @@
+#!/bin/bash
+
+while read -r line; do echo "<span font_features='tnum'>$line</span>"; done

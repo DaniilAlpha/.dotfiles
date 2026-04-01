@@ -1,0 +1,71 @@
+# i3blocks configuration file
+# see https://vivien.github.io/i3blocks
+
+# global 
+markup=pango
+
+# separator
+separator=false
+separator_block_width=10
+full_text=<span color='#606570'>  //  </span>
+
+
+### network ###
+
+#[net]
+#label=  
+#command=./blocks/net | ./fix-num-fmt
+#interval=persist
+
+### system stats ###
+
+[cpu]
+label= 
+command=./blocks/cpu | ./fix-num-fmt
+interval=persist
+
+[ram_swap]
+label= 
+command=./blocks/ram_swap | ./fix-num-fmt
+interval=persist
+
+[disk]
+label= 
+command=./blocks/disk | ./fix-num-fmt
+interval=persist
+
+### battery ###
+[separator]
+
+[bat]
+label= 
+command=./blocks/bat | ./fix-num-fmt
+interval=persist
+
+### clock ###
+[separator]
+
+[volume]
+label=
+command=pactl get-sink-mute @DEFAULT_SINK@ | grep -q "yes" && echo   || echo  $(pactl get-sink-volume @DEFAULT_SINK@ | head -n1 | cut -F5 | cut -d% -F1)%
+interval=1
+
+[brightness]
+label= 
+command=echo $(( $(brightnessctl g)*100/$(brightnessctl m) ))%
+interval=1
+
+[updates]
+full_text=
+command=UPDATES=$(cat /tmp/update_checker_count) && [ $UPDATES -gt 0 ] && echo  $UPDATES | ./fix-num-fmt
+interval=15
+
+[uptime]
+label= 
+command=./blocks/uptime | ./fix-num-fmt
+interval=persist
+
+[time]
+label= 
+command=echo $(date '+%d %b %H:%M') | ./fix-num-fmt
+interval=15

@@ -1,0 +1,8 @@
+#!/bin/bash
+
+INTERFACE=wlan0
+
+while true; do
+	echo "$(ip addr show $INTERFACE | awk '/inet[^6]/ {print $2}')"
+	sleep 30
+done

@@ -1,0 +1,17 @@
+#!/bin/bash
+
+chosen=$(rofi -dmenu -i -p power -theme-str 'window {width: 300px;} listview {lines: 4;}' <<EOF
+ logout
+ suspend
+ reboot
+ power off
+EOF
+)
+chosen=$(echo $chosen | cut -F2)
+
+case $chosen in
+	logout) i3-msg exit ;;
+	suspend) sudo loginctl suspend ;;
+	reboot) sudo loginctl reboot ;;
+	power) sudo loginctl poweroff ;;
+esac

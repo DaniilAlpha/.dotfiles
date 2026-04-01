@@ -1,0 +1,15 @@
+#!/bin/bash
+
+MAIN_BAT=/sys/class/power_supply/pad-battery/
+DOCK_BAT=/sys/class/power_supply/dock-battery/
+
+MAIN_THERMAL=/sys/class/thermal/thermal_zone0
+DOCK_THERMAL=/sys/class/thermal/thermal_zone3
+
+while true; do
+	#
+	MAIN_TEMP=$(cat "$MAIN_THERMAL"/temp | awk '{printf "%d", $1/1000}')℃
+	DOCK_TEMP=$(cat "$DOCK_THERMAL"/temp | awk '{printf "%d", $1/1000}')℃
+	echo "$(cat "$MAIN_BAT"/capacity)% / <span size='small'>$(cat "$DOCK_BAT"/capacity)%</span>"
+	sleep 60
+done
