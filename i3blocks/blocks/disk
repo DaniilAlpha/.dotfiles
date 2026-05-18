@@ -1,6 +1,0 @@
-#!/bin/bash
-
-while true; do
-	echo $(df -h / | awk '/\// {print $4}')
-	sleep 60
-done

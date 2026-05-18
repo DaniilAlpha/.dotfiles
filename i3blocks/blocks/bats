@@ -1,0 +1,15 @@
+#!/bin/bash
+
+while true; do
+    I=$(($I+1))
+    OUTPUT=$(~/.scripts/statscored/statscore bats.1.$I.value)
+    if [[ "$OUTPUT" == "nil" ]]; then break; fi
+
+    echo $OUTPUT
+
+	#
+	#MAIN_TEMP=$(cat "$MAIN_THERMAL"/temp | awk '{printf "%d", $1/1000}')℃
+	#DOCK_TEMP=$(cat "$DOCK_THERMAL"/temp | awk '{printf "%d", $1/1000}')℃
+	#echo "$(cat "$MAIN_BAT"/capacity)% / <span size='small'>$(cat "$DOCK_BAT"/capacity)%</span>"
+	#sleep 60
+done

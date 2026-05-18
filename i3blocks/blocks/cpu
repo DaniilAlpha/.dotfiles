@@ -1,8 +1,0 @@
-#!/bin/bash
-
-CPU_THERMAL=/sys/class/thermal/thermal_zone2
-
-while true; do
-	echo "$(uptime | awk -F'load average: ' '{printf "%d", $2/4*100}')% $(cat "$CPU_THERMAL"/temp | awk '{printf "%d", $1/1000}')℃"
-	sleep 10
-done

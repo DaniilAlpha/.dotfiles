@@ -4,66 +4,70 @@
 # global 
 markup=pango
 
-# separator
+# --- (separator)
 separator=false
 separator_block_width=10
-full_text=<span color='#606570'>  //  </span>
+full_text=<span color='#606570'> // </span>
 
 
-### network ###
+### netfaces ###
 
-#[net]
-#label=  
-#command=./blocks/net | ./fix-num-fmt
-#interval=persist
+[net]
+label=  
+command=echo $(~/.scripts/statscored/statscore netfaces.1.value) "($(~/.scripts/statscored/statscore netfaces.1.name))" | ./fix-num-fmt
+interval=10
 
-### system stats ###
+### temps ###
+[---]
+
+[temps]
+label= 
+command=echo $(~/.scripts/statscored/statscore temps.1.value) "($(~/.scripts/statscored/statscore temps.1.name))" | ./fix-num-fmt
+interval=30
+
+### bats ###
+[---]
+
+[bat]
+label= 
+command=echo $(~/.scripts/statscored/statscore bats.1.1.value) - $(~/.scripts/statscored/statscore bats.remain_time) | ./fix-num-fmt
+interval=30
+
+### system health ###
+[---]
 
 [cpu]
 label= 
-command=./blocks/cpu | ./fix-num-fmt
-interval=persist
+command=~/.scripts/statscored/statscore cpu_load.value | ./fix-num-fmt
+interval=5
 
-[ram_swap]
+[ram]
 label= 
-command=./blocks/ram_swap | ./fix-num-fmt
-interval=persist
+command=echo $(~/.scripts/statscored/statscore ram.value) + $(~/.scripts/statscored/statscore swap.value) | ./fix-num-fmt
+interval=5
 
 [disk]
-label= 
-command=./blocks/disk | ./fix-num-fmt
-interval=persist
+label= 
+command=~/.scripts/statscored/statscore fs."/".value | ./fix-num-fmt
+interval=60
 
-### battery ###
-[separator]
-
-[bat]
-label= 
-command=./blocks/bat | ./fix-num-fmt
-interval=persist
-
-### clock ###
-[separator]
-
-[volume]
-label=
-command=pactl get-sink-mute @DEFAULT_SINK@ | grep -q "yes" && echo   || echo  $(pactl get-sink-volume @DEFAULT_SINK@ | head -n1 | cut -F5 | cut -d% -F1)%
-interval=1
+### system bar ###
+[---]
 
 [brightness]
 label= 
 command=echo $(( $(brightnessctl g)*100/$(brightnessctl m) ))%
 interval=1
 
+[volume]
+label=
+command=echo $(pactl get-sink-mute @DEFAULT_SINK@ | grep -q "yes" && echo   || echo ) $(pactl get-sink-volume @DEFAULT_SINK@ | head -n1 | cut -F5 | cut -d% -F1)%
+interval=1
+
 [updates]
 full_text=
 command=UPDATES=$(cat /tmp/update_checker_count) && [ $UPDATES -gt 0 ] && echo  $UPDATES | ./fix-num-fmt
-interval=15
-
-[uptime]
-label= 
-command=./blocks/uptime | ./fix-num-fmt
-interval=persist
+interval=5
 
 [time]
 label= 
