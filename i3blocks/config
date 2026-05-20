@@ -13,43 +13,47 @@ full_text=<span color='#606570'> // </span>
 ### netfaces ###
 
 [net]
-label=  
-command=echo $(~/.scripts/statscored/statscore netfaces.1.value) "($(~/.scripts/statscored/statscore netfaces.1.name))" | ./fix-num-fmt
-interval=10
+command=./monitor-statscore netfaces.combo  | ./fix-num-fmt
+interval=persist
 
 ### temps ###
 [---]
 
-[temps]
-label= 
-command=echo $(~/.scripts/statscored/statscore temps.1.value) "($(~/.scripts/statscored/statscore temps.1.name))" | ./fix-num-fmt
-interval=30
+[temp]
+command=./monitor-statscore temps.1 ,,,, | ./fix-num-fmt
+interval=persist
+[temp-name]
+command=~/.scripts/statscored/statscore temps.1.name
+interval=5
 
 ### bats ###
 [---]
 
 [bat]
-label= 
-command=echo $(~/.scripts/statscored/statscore bats.1.1.value) - $(~/.scripts/statscored/statscore bats.remain_time) | ./fix-num-fmt
-interval=30
+command=./monitor-statscore bats.combo ,,,, | ./fix-num-fmt 
+interval=persist
+[remain_time]
+label= 
+command=~/.scripts/statscored/statscore bats.remain_time | ./fix-num-fmt
+interval=15
 
 ### system health ###
 [---]
 
 [cpu]
-label= 
-command=~/.scripts/statscored/statscore cpu_load.value | ./fix-num-fmt
-interval=5
+command=./monitor-statscore cpu_load  | ./fix-num-fmt
+interval=persist
 
 [ram]
-label= 
-command=echo $(~/.scripts/statscored/statscore ram.value) + $(~/.scripts/statscored/statscore swap.value) | ./fix-num-fmt
-interval=5
+command=./monitor-statscore ram  | ./fix-num-fmt
+interval=persist
+[swap]
+command=./monitor-statscore swap  | ./fix-num-fmt
+interval=persist
 
 [disk]
-label= 
-command=~/.scripts/statscored/statscore fs."/".value | ./fix-num-fmt
-interval=60
+command=./monitor-statscore fs."/"  | ./fix-num-fmt
+interval=persist
 
 ### system bar ###
 [---]
@@ -71,5 +75,5 @@ interval=5
 
 [time]
 label= 
-command=echo $(date '+%d %b %H:%M') | ./fix-num-fmt
+command=date '+%d %b  ·  %H:%M' | ./fix-num-fmt
 interval=15
