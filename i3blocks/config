@@ -64,14 +64,13 @@ command=echo $(( $(brightnessctl g)*100/$(brightnessctl m) ))%
 interval=1
 
 [volume]
-label=
 command=echo $(pactl get-sink-mute @DEFAULT_SINK@ | grep -q "yes" && echo   || echo ) $(pactl get-sink-volume @DEFAULT_SINK@ | head -n1 | cut -F5 | cut -d% -F1)%
 interval=1
 
 [updates]
 full_text=
-command=UPDATES=$(cat /tmp/update_checker_count) && [ $UPDATES -gt 0 ] && echo  $UPDATES | ./fix-num-fmt
-interval=5
+command=function echo-updates { UPDATES=$(cat /tmp/update_checker_count); [ $UPDATES -gt 0 ] && echo " $UPDATES" | ./fix-num-fmt || echo ""; }; echo-updates; exec inotifyd - /tmp/update_checker_count:c | while read -r event; do echo-updates; done
+interval=persist
 
 [time]
 label= 
