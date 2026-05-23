@@ -233,13 +233,17 @@ bindsym $mod+Ctrl+r mode "resize"
 ###########
 
 bar {
-        status_command i3blocks
+    status_command ~/.config/i3/bar.lua
+    status_command i3blocks
 
 	font pango:sans-serif bold 8
 
+    separator_symbol " // "
+
 	colors {
-		background $col-back
-		statusline $col-onback
+		background  $col-back
+		statusline  $col-onback
+        separator   $col-secn
 
 		#name			border		back		on back
 		focused_workspace	$col-prim	$col-prim	$col-onprim
