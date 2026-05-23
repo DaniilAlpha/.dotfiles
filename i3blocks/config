@@ -30,7 +30,7 @@ interval=5
 [---]
 
 [bat]
-command=./monitor-statscore bats.combo ,,,, | ./fix-num-fmt 
+command=./monitor-statscore bats.combo ,,,, | ./fix-num-fmt 
 interval=persist
 [remain_time]
 label= 
