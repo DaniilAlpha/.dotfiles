@@ -57,7 +57,7 @@ exec --no-startup-id cd ~/.scripts/statscored/ && ./statscored
 ### workspaces ###
 ##################
 
-set $ws1 "1:  Main"
+set $ws1 "1: 󰆍 Main"
 set $ws2 "2"
 set $ws3 "3"
 set $ws4 "4"
@@ -234,7 +234,7 @@ bindsym $mod+Ctrl+r mode "resize"
 
 bar {
     status_command ~/.config/i3/bar.lua
-    status_command i3blocks
+    #status_command i3blocks
 
 	font pango:sans-serif bold 8
 
