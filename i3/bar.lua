@@ -113,7 +113,7 @@ local function bat()
 	---@type Stats<string>, string
 	local bat_combo, remain_time =
 		table.get_in(statscore, "bats", "combo"), table.get_in(statscore, "bats", "remain_time")
-	return bat_combo
+	return bat_combo and remain_time 
 		and {
 			range_icon(
 				bat_combo.risk,
