@@ -1,0 +1,40 @@
+#!/bin/sh
+cd $(dirname "$0")
+
+TMPFS=${XDG_RUNTIME_DIR:-/tmp}
+FIFO=$TMPFS/i3bar_fifo
+mkfifo $FIFO 2> /dev/null;
+
+lua ./bar.lua < $FIFO &
+
+(
+    echo '[';
+
+    # clock tick events
+    while true; do
+        echo '{"event": "clock"},' && sleep 1;
+    done &
+
+    # update checher events
+    inotifywait -q -m -e close_write /tmp/update_checker_count | while read -r line; do
+        echo '{"event": "update_checker"},'; 
+    done &
+
+    # volume change events
+    pactl subscribe | while read -r line; do 
+        [ "${line#*on sink}" != "$line" ] && echo '{"event": "volume"},';
+    done &
+
+    # brightness change events
+    script -qc "udevadm monitor --udev --subsystem=backlight" /dev/null | while read -r line; do 
+        echo '{"event": "backlight"},';
+    done &
+
+    # events piped from `i3bar`
+    while read -r line; do
+        if [ "$line" != "[" ]; then
+            line="${line#,}";
+            echo "$line,";
+        fi;
+    done 
+) > $FIFO

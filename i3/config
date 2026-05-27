@@ -194,9 +194,6 @@ bindsym XF86AudioMute		exec --no-startup-id pactl set-sink-mute @DEFAULT_SINK@ t
 bindsym $mod+XF86AudioMute	exec --no-startup-id pactl set-sink-mute @DEFAULT_SINK@ toggle && $notify-volume 
 
 
-#set $refresh_i3status killall -SIGUSR1 i3status
-
-
 ###################
 ### resize mode ###
 ###################
@@ -233,7 +230,7 @@ bindsym $mod+Ctrl+r mode "resize"
 ###########
 
 bar {
-    status_command ~/.config/i3/bar.lua
+    status_command ~/.config/i3/bar
 
 	font pango:sans-serif bold 8
 

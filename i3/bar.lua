@@ -1,10 +1,3 @@
-#!/usr/bin/lua
-
-local posix = require("posix")
-function math.clamp(x, a, b)
-	return math.min(math.max(x, a), b)
-end
-
 local USE_PANGO = true
 local DEFAULT_PREFIX = "<span font_features='tnum'>"
 local DEFAULT_POSTFIX = "</span>"
@@ -133,7 +126,7 @@ end
 ---@field [number] string
 
 local function bar_start()
-	io.write('{"version": 1}', "\n")
+	io.write('{"version": 1, "click_events": true}', "\n")
 	io.write("[", "\n")
 	io.flush()
 end
@@ -225,7 +218,7 @@ local function temp()
 			color = rank_strs(max_temp.risk, RISK_COLORS),
 
 			rank_strs(max_temp.risk, { "󱃃", "󱃃", "󰔏", "󱃂", "󰈸" }),
-			string.format("%d", max_temp.value),
+			string.format("%d°C", max_temp.value),
 			max_temp_name and "(" .. max_temp_name .. ")",
 		}
 end
@@ -323,98 +316,125 @@ local function updates()
 	return updates_count and updates_count > 0 and { "󰑐", tostring(updates_count) } or nil
 end
 
+---@type integer?
+local time
 ---@return BarSection?
 local function clock()
-	return { "󰃭", os.date("%d %b  ·  %H:%M:%S") }
+	return time and { "󰃭", os.date("%d %b  ·  %H:%M:%S", time) }
 end
 
 ------------
 --- main ---
 ------------
 
+---@return integer?
+local function get_updates_count()
+	local file = io.open("/tmp/update_checker_count", "r")
+	if not file then
+		return
+	end
+
+	---@type integer
+	local count = file:read("*n")
+
+	file:close()
+
+	return count
+end
+
+---@return integer?, boolean?
+local function get_volume_and_muted()
+	local vol_pipe = io.popen("pactl get-sink-volume @DEFAULT_SINK@")
+	local mute_pipe = io.popen("pactl get-sink-mute @DEFAULT_SINK@")
+	if not mute_pipe or not vol_pipe then
+		if vol_pipe then
+			vol_pipe:close()
+		end
+		if mute_pipe then
+			mute_pipe:close()
+		end
+		return
+	end
+
+	---@type integer, boolean
+	local vol, is_muted =
+		vol_pipe:read("*a"):match("Volume:%s*[-%w]+:%s*[^/]+%s*/%s*(%d+)%%"),
+		mute_pipe:read("*a"):match("Mute: (%w+)") == "yes"
+
+	vol_pipe:close()
+	mute_pipe:close()
+
+	return vol, is_muted
+end
+
+---@return integer?
+local function get_brightness()
+	local brightness_pipe = io.popen("brightnessctl i")
+	if not brightness_pipe then
+		return
+	end
+
+	---@type integer
+	local val = brightness_pipe:read("*a"):match(".+%s*Current brightness:%s*%d+%s*%((%d+)%%%)")
+
+	brightness_pipe:close()
+
+	return val
+end
+
+---@return table?, string?
+local function get_statscore()
+	local path = "/dev/shm/statscore.lua"
+	local env = {}
+
+	---@type fun()?, string?
+	local get, err
+	if setfenv then
+		get, err = loadfile(path)
+		get = get and setfenv(get, env)
+	else
+		get, err = loadfile(path, "t", env)
+	end
+	if not get then
+		return nil, "Loading file failed: " .. err
+	end
+
+	---@type boolean, table
+	local ok, res = pcall(get)
+	if not ok then
+		return nil, "Executing file failed: " .. tostring(res)
+	end
+
+	return res
+end
+
+time = 0
+updates_count = get_updates_count()
+volume_val, volume_is_muted = get_volume_and_muted()
+brightness_val = get_brightness()
+statscore = get_statscore()
+
 bar_start()
-while true do
-	updates_count = (function()
-		local file = io.open("/tmp/update_checker_count", "r")
-		if not file then
-			return
-		end
+for line in io.lines() do
+	---@cast line string
 
-		---@type integer
-		local count = file:read("*n")
-
-		file:close()
-
-		return count
-	end)()
-
-	volume_val, volume_is_muted = (function()
-		local vol_pipe = io.popen("pactl get-sink-volume @DEFAULT_SINK@")
-		local mute_pipe = io.popen("pactl get-sink-mute @DEFAULT_SINK@")
-		if not mute_pipe or not vol_pipe then
-			if vol_pipe then
-				vol_pipe:close()
-			end
-			if mute_pipe then
-				mute_pipe:close()
-			end
-			return
-		end
-
-		---@type integer, boolean
-		local val, is_muted =
-			vol_pipe:read("*a"):match("Volume:%s*[-%w]+:%s*[^/]+%s*/%s*(%d+)%%"),
-			mute_pipe:read("*a"):match("Mute: (%w+)") == "yes"
-
-		vol_pipe:close()
-		mute_pipe:close()
-
-		return val, is_muted
-	end)()
-
-	brightness_val = (function()
-		local brightness_pipe = io.popen("brightnessctl i")
-		if not brightness_pipe then
-			return
-		end
-
-		---@type integer
-		local val = brightness_pipe:read("*a"):match(".+%s*Current brightness:%s*%d+%s*%((%d+)%%%)")
-
-		brightness_pipe:close()
-
-		return val
-	end)()
-
-	statscore = (function()
-		local path = "/dev/shm/statscore.lua"
-		local env = {}
-
-		local get_statscore, err
-		if setfenv then
-			get_statscore, err = loadfile(path)
-			get_statscore = get_statscore and setfenv(get_statscore, env)
-		else
-			get_statscore, err = loadfile(path, "t", env)
-		end
-		if not get_statscore then
-			return nil, "Loading file failed: " .. err
-		end
-
-		local ok, res = pcall(get_statscore)
-		if not ok then
-			return nil, "Executing file failed: " .. tostring(res)
-		end
-
-		return res
-	end)()
+	if line:find('"event":%s*"clock"') then
+		time = os.time()
+		statscore = get_statscore() -- TODO move out of here
+	elseif line:find('"event":%s*"update_checker"') then
+		updates_count = get_updates_count()
+	elseif line:find('"event":%s*"volume"') then
+		volume_val, volume_is_muted = get_volume_and_muted()
+	elseif line:find('"event":%s*"backlight"') then
+		brightness_val = get_brightness()
+	end
 
 	bar_flush({
+		{ { line } },
 		{ net() },
 		{ temp() },
 		{ bat() },
 		{ cpu(), mem(), disk() },
 		{ brightness(), volume(), updates(), clock() },
 	})
-	posix.sleep(1)
 end
