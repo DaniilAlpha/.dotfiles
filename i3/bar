@@ -12,7 +12,13 @@ lua ./bar.lua < $FIFO &
 
     # clock tick events
     while true; do
-        echo '{"event": "clock"},' && sleep 1;
+        echo '{"event": "clock"},' && sleep $(( 61 - $(date +%s) % 60 ));
+    done &
+
+    # statscored events
+    # TODO temp 
+    while true; do
+        echo '{"event": "statscored"},' && sleep 4;
     done &
 
     # update checher events

@@ -320,7 +320,7 @@ end
 local time
 ---@return BarSection?
 local function clock()
-	return time and { "󰃭", os.date("%d %b  ·  %H:%M:%S", time) }
+	return time and { "󰃭", os.date("%d %b  ·  %H:%M", time) }
 end
 
 ------------
@@ -387,22 +387,18 @@ local function get_statscore()
 	local path = "/dev/shm/statscore.lua"
 	local env = {}
 
-	---@type fun()?, string?
-	local get, err
+	local get, err = loadfile(path, "t", env)
 	if setfenv then
-		get, err = loadfile(path)
 		get = get and setfenv(get, env)
-	else
-		get, err = loadfile(path, "t", env)
-	end
-	if not get then
-		return nil, "Loading file failed: " .. err
 	end
 
-	---@type boolean, table
+	if not get then
+		return nil, err
+	end
+
 	local ok, res = pcall(get)
 	if not ok then
-		return nil, "Executing file failed: " .. tostring(res)
+		return nil, res
 	end
 
 	return res
@@ -420,7 +416,8 @@ for line in io.lines() do
 
 	if line:find('"event":%s*"clock"') then
 		time = os.time()
-		statscore = get_statscore() -- TODO move out of here
+	elseif line:find('"event":%s*"statscored"') then
+		statscore = get_statscore()
 	elseif line:find('"event":%s*"update_checker"') then
 		updates_count = get_updates_count()
 	elseif line:find('"event":%s*"volume"') then
