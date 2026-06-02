@@ -1,3 +1,5 @@
+local posix = require("posix")
+
 local USE_PANGO = true
 local DEFAULT_PREFIX = "<span font_features='tnum'>"
 local DEFAULT_POSTFIX = "</span>"
@@ -117,54 +119,6 @@ end
 -- print(tostring_si(-816333, "u"))
 -- print(tostring_si(-5131483, "u"))
 
---------------------
---- bar protocol ---
---------------------
-
----@class BarSection
----@field color string?
----@field [number] string
-
-local function bar_start()
-	io.write('{"version": 1, "click_events": true}', "\n")
-	io.write("[", "\n")
-	io.flush()
-end
-
----@param groups BarSection[][]
-local function bar_flush(groups)
-	---@param s string?
-	---@return string
-	local function to_json_string_or_nil(s)
-		return s and string.format("%q", s):gsub("\\\n", "\\n") or "null"
-	end
-
-	local sections_strs = {}
-	for _, sections in pairs(groups) do
-		for i, section in pairs(sections) do
-			local text = #section > 0 and table.concat(section, " ") or nil
-			text = text and DEFAULT_PREFIX .. text .. DEFAULT_POSTFIX
-
-			local color = section.color and section.color:match("^#%x%x%x%x%x%x$")
-
-			local is_last_section = i == #sections
-
-			sections_strs[#sections_strs + 1] = text
-				and string.format(
-					'{"full_text": %s, "color": %s, "markup": %s, "separator_block_width": %d, "separator": %s}',
-					to_json_string_or_nil(text),
-					to_json_string_or_nil(color),
-					to_json_string_or_nil(USE_PANGO and "pango" or nil),
-					is_last_section and GROUP_SEP_WIDTH or SEP_WIDTH,
-					is_last_section and "true" or "false"
-				)
-		end
-	end
-
-	io.write("[" .. table.concat(sections_strs, ",") .. "],", "\n")
-	io.flush()
-end
-
 ----------------
 --- sections ---
 ----------------
@@ -173,10 +127,7 @@ end
 ---@field value T
 ---@field risk number
 
----@type table?
-local statscore
-
----@return BarSection?
+---@return Section?
 local function net()
 	---@type {[string]: Stats<number>}?
 	local netfaces = table.get_in(statscore, "netfaces")
@@ -198,7 +149,7 @@ local function net()
 	}
 end
 
----@return BarSection?
+---@return Section?
 local function temp()
 	---@type {[string]: Stats<number>}?
 	local temps = table.get_in(statscore, "temps")
@@ -223,33 +174,7 @@ local function temp()
 		}
 end
 
----@return BarSection?
-local function bat()
-	---@alias BatStats Stats<{charge: integer, rate: number}>
-	---@type BatStats?, {[string]: BatStats}?
-	local combo = table.get_in(statscore, "bat")
-	if not combo then
-		return
-	end
-
-	local is_charging = combo.value.rate >= 0
-	local remain_time = (is_charging and (100 - combo.value.charge) or -combo.value.charge) / combo.value.rate
-
-	return {
-		color = rank_strs(combo.risk, RISK_COLORS),
-
-		rank_strs(
-			combo.risk,
-			is_charging and { "󰂅", "󰂋", "󰂊", "󰢞", "󰂉", "󰢝", "󰂈", "󰂇", "󰂆", "󰢜" }
-				or { "󰁹", "󰂂", "󰂁", "󰂀", "󰁿", "󰁾", "󰁽", "󰁼", "󰁻", "󰁺" }
-		),
-		string.format("%d%% %+.2f%%/m", combo.value.charge, combo.value.rate * 60),
-		"󱎫",
-		-math.huge < remain_time and remain_time < math.huge and os.date("!%H:%M:%S", remain_time) or "forever",
-	}
-end
-
----@return BarSection?
+---@return Section?
 local function cpu()
 	---@type Stats<number>?
 	local cpu_load = table.get_in(statscore, "cpu_load")
@@ -262,7 +187,7 @@ local function cpu()
 		}
 end
 
----@return BarSection?
+---@return Section?
 local function mem()
 	---@type Stats<integer>?, Stats<integer>?
 	local ram, swap = table.get_in(statscore, "ram"), table.get_in(statscore, "swap")
@@ -278,7 +203,7 @@ local function mem()
 		}
 end
 
----@return BarSection?
+---@return Section?
 local function disk()
 	---@type Stats<integer>?
 	local rootfs = table.get_in(statscore, "fs", "/")
@@ -291,105 +216,37 @@ local function disk()
 		}
 end
 
----@type integer?
-local brightness_val
----@return BarSection?
-local function brightness()
-	return brightness_val and { rank_strs(brightness_val / 100, { "󰃞", "󰃟", "󰃠" }), brightness_val .. "%" }
-end
-
----@type integer?, boolean?
-local volume_val, volume_is_muted
----@return BarSection?
-local function volume()
-	return volume_val
-		and {
-			volume_is_muted and "󰝟" or rank_strs(volume_val / 100, { "󰕿", "󰖀", "󰕾" }),
-			volume_val .. "%",
-		}
-end
-
----@type integer?
-local updates_count
----@return BarSection?
-local function updates()
-	return updates_count and updates_count > 0 and { "󰑐", tostring(updates_count) } or nil
-end
-
----@type integer?
-local time
----@return BarSection?
-local function clock()
-	return time and { "󰃭", os.date("%d %b  ·  %H:%M", time) }
-end
-
 ------------
 --- main ---
 ------------
 
----@return integer?
-local function get_updates_count()
-	local file = io.open("/tmp/update_checker_count", "r")
-	if not file then
-		return
-	end
-
-	---@type integer
-	local count = file:read("*n")
-
-	file:close()
-
-	return count
-end
-
----@return integer?, boolean?
+---@return boolean?
 local function get_volume_and_muted()
-	local vol_pipe = io.popen("pactl get-sink-volume @DEFAULT_SINK@")
 	local mute_pipe = io.popen("pactl get-sink-mute @DEFAULT_SINK@")
-	if not mute_pipe or not vol_pipe then
-		if vol_pipe then
-			vol_pipe:close()
-		end
-		if mute_pipe then
-			mute_pipe:close()
-		end
+	if not mute_pipe then
 		return
 	end
 
-	---@type integer, boolean
-	local vol, is_muted =
-		vol_pipe:read("*a"):match("Volume:%s*[-%w]+:%s*[^/]+%s*/%s*(%d+)%%"),
-		mute_pipe:read("*a"):match("Mute: (%w+)") == "yes"
+	---@type boolean
+	local is_muted = mute_pipe:read("*a"):match("Mute: (%w+)") == "yes"
 
-	vol_pipe:close()
 	mute_pipe:close()
 
-	return vol, is_muted
+	return is_muted
 end
 
----@return integer?
-local function get_brightness()
-	local brightness_pipe = io.popen("brightnessctl i")
-	if not brightness_pipe then
-		return
-	end
-
-	---@type integer
-	local val = brightness_pipe:read("*a"):match(".+%s*Current brightness:%s*%d+%s*%((%d+)%%%)")
-
-	brightness_pipe:close()
-
-	return val
-end
-
+---@param str string
 ---@return table?, string?
-local function get_statscore()
-	local path = "/dev/shm/statscore.lua"
+local function create_statscore(str)
 	local env = {}
 
-	local get, err = loadfile(path, "t", env)
+	---@type function?, string?
+	local get, err
 	if setfenv then
+		get, err = loadstring(str)
 		get = get and setfenv(get, env)
+	else
+		get, err = load(str, nil, "t", env)
 	end
 
 	if not get then
@@ -404,34 +261,281 @@ local function get_statscore()
 	return res
 end
 
-time = 0
-updates_count = get_updates_count()
-volume_val, volume_is_muted = get_volume_and_muted()
-brightness_val = get_brightness()
-statscore = get_statscore()
+local read_line_nonblock = (function()
+	---@type string[][]
+	local bufs = {}
 
-bar_start()
-for line in io.lines() do
-	---@cast line string
+	---@param fd PosixFile
+	---@return string?
+	return function(fd)
+		local buf = bufs[fd] or {}
 
-	if line:find('"event":%s*"clock"') then
-		time = os.time()
-	elseif line:find('"event":%s*"statscored"') then
-		statscore = get_statscore()
-	elseif line:find('"event":%s*"update_checker"') then
-		updates_count = get_updates_count()
-	elseif line:find('"event":%s*"volume"') then
-		volume_val, volume_is_muted = get_volume_and_muted()
-	elseif line:find('"event":%s*"backlight"') then
-		brightness_val = get_brightness()
+		---@type string?
+		local res
+
+		local str = posix.unistd.read(fd, 4096)
+		if not str then
+			return
+		end
+
+		local newline_pos = str:find("\n")
+		if newline_pos then
+			local rem
+			buf[#buf + 1], rem = str:sub(1, newline_pos - 1), str:sub(newline_pos + 1, -1)
+			res = table.concat(buf, nil)
+			buf = { rem }
+		else
+			buf[#buf + 1] = str
+		end
+
+		bufs[fd] = buf
+		return res
+	end
+end)()
+
+---@alias PosixFile table
+
+---@class RenderedSection
+---@field color string?
+---@field [integer] string
+
+---@class Section
+---@field source PosixFile|integer
+---@field format fun(...: any?): RenderedSection?
+
+---@param text string
+---@param color string
+---@param do_show_sep boolean?
+---@return string
+local function section_to_json(text, color, do_show_sep)
+	---@param s string?
+	---@return string
+	local function json_string_or_nil(s)
+		return s and string.format("%q", s):gsub("\\\n", "\\n") or "null"
 	end
 
-	bar_flush({
-		{ { line } },
-		{ net() },
-		{ temp() },
-		{ bat() },
-		{ cpu(), mem(), disk() },
-		{ brightness(), volume(), updates(), clock() },
-	})
+	return string.format(
+		'{"full_text": %s, "color": %s, "markup": %s, "separator_block_width": %d, "separator": %s}',
+		json_string_or_nil(text),
+		json_string_or_nil(color),
+		json_string_or_nil(USE_PANGO and "pango" or nil),
+		do_show_sep and GROUP_SEP_WIDTH or SEP_WIDTH,
+		do_show_sep and "true" or "false"
+	)
 end
+
+---@param groups Section[][]
+local function bar_run(groups)
+	io.write('{"version": 1, "click_events": true}', "\n")
+	io.write("[", "\n")
+	io.flush()
+
+	local poll_fds = {}
+	for _, group in ipairs(groups) do
+		for _, section in ipairs(group) do
+			if type(section.source) == "table" then
+				local fd = section.source.fd
+				posix.fcntl.fcntl(
+					fd,
+					posix.fcntl.F_SETFL,
+					posix.fcntl.fcntl(fd, posix.fcntl.F_GETFL) + posix.fcntl.O_NONBLOCK
+				)
+				poll_fds[fd] = { events = { IN = true }, revents = { IN = false } }
+			end
+		end
+	end
+
+	---@type RenderedSection[][]
+	local rendered_groups = {}
+	while true do
+		local fd_count = posix.poll.poll(poll_fds, 1 * 1000) -- TODO wait until the closest time source
+		for i, group in pairs(groups) do
+			for j, section in pairs(group) do
+				---@type any
+				local data
+
+				local source = section.source
+				if type(source) == "table" and poll_fds[source.fd].revents.IN then
+					data = read_line_nonblock(source.fd)
+				elseif type(source) == "number" and os.time() % source == 0 then
+					data = os.time()
+				end
+
+				if data then
+					rendered_groups[i] = rendered_groups[i] or {}
+					rendered_groups[i][j] = section.format(data)
+				end
+			end
+		end
+
+		local json_sections = {}
+		for _, group in pairs(rendered_groups) do
+			for j, section in pairs(group) do
+				local text = #section > 0 and table.concat(section, " ") or nil
+				text = text and DEFAULT_PREFIX .. text .. DEFAULT_POSTFIX
+
+				local color = section.color and section.color:match("^#%x%x%x%x%x%x%x?%x?$")
+
+				json_sections[#json_sections + 1] = text and section_to_json(text, color, j == #group)
+			end
+		end
+		io.write("[" .. table.concat(json_sections, ",") .. "],", "\n")
+		io.flush()
+	end
+end
+
+-------------
+--- pipes ---
+-------------
+
+---@type PosixFile
+local updates_count_pipe = posix.popen({
+	"sh",
+	"-c",
+	[[
+  inotifywait -qm -eclose_write /tmp/update_checker_count | while read -r _; do 
+    cat /tmp/update_checker_count;
+  done
+  ]],
+}, "r")
+
+---@type PosixFile
+local volume_pipe = posix.popen({
+	"sh",
+	"-c",
+	[[
+  pactl subscribe | while read -r line; do
+    if [ "${line#*on sink}" != "$line" ]; then
+      res=$(pactl get-sink-volume @DEFAULT_SINK@ | cut -F5)
+      echo ${res%%%}
+    fi
+  done
+  ]],
+}, "r")
+
+---@type PosixFile
+local brightness_pipe = posix.popen({
+	"sh",
+	"-c",
+	[[
+  script -qc "udevadm monitor --udev --subsystem=backlight" /dev/null | while read -r _; do
+    echo $(( 100 * $(brightnessctl g) / $(brightnessctl m) ))
+  done
+  ]],
+}, "r")
+
+---@type PosixFile
+local statscore_pipe = posix.popen({
+	"sh",
+	"-c",
+	[[
+  while :; do 
+    cat /run/user/10000/statscore.lua && echo 
+		sleep 4
+  done
+  ]],
+}, "r")
+
+----------------
+--- sections ---
+----------------
+
+---@type Section
+local clock = {
+	source = 60,
+	format = function(time)
+		return time and { "󰃭", os.date("%d %b  ·  %H:%M", time) }
+	end,
+}
+
+---@type Section
+local updates_count = {
+	source = updates_count_pipe,
+	format = function(updates_count)
+		updates_count = tonumber(updates_count) -- TODO can crash
+		return updates_count and updates_count > 0 and { "󰑐", tostring(updates_count) } or nil
+	end,
+}
+
+---@type Section
+local volume = {
+	source = volume_pipe,
+	format = function(volume)
+		local volume_is_muted = false -- TODO wrong
+		volume = tonumber(volume)
+		return volume
+			and {
+				volume_is_muted and "󰝟" or rank_strs(volume / 100, { "󰕿", "󰖀", "󰕾" }),
+				volume .. "%",
+			}
+	end,
+}
+
+---@type Section
+local brightness = {
+	source = brightness_pipe,
+	format = function(brightness)
+		brightness = tonumber(brightness) -- TODO can crash
+		return brightness and { rank_strs(brightness / 100, { "󰃞", "󰃟", "󰃠" }), brightness .. "%" }
+	end,
+}
+
+---@type Section?
+local bat = {
+	source = statscore_pipe,
+	format = function(statscore_str)
+		local statscore, err = create_statscore(statscore_str)
+
+		---@alias BatStats Stats<{charge: integer, rate: number}>
+		---@type BatStats?, {[string]: BatStats}?
+		local combo = table.get_in(statscore, "bat")
+		if not combo then
+			return
+		end
+
+		local is_charging = combo.value.rate >= 0
+		local remain_time = (is_charging and (100 - combo.value.charge) or -combo.value.charge) / combo.value.rate
+
+		return {
+			color = rank_strs(combo.risk, RISK_COLORS),
+
+			rank_strs(
+				combo.risk,
+				is_charging and { "󰂅", "󰂋", "󰂊", "󰢞", "󰂉", "󰢝", "󰂈", "󰂇", "󰂆", "󰢜" }
+					or { "󰁹", "󰂂", "󰂁", "󰂀", "󰁿", "󰁾", "󰁽", "󰁼", "󰁻", "󰁺" }
+			),
+			string.format("%d%% %+.2f%%/m", combo.value.charge, combo.value.rate * 60),
+			"󱎫",
+			-math.huge < remain_time and remain_time < math.huge and os.date("!%H:%M:%S", remain_time) or "forever",
+		}
+	end,
+}
+
+-- volume_val, volume_is_muted = get_volume_and_muted()
+-- brightness_val = get_brightness()
+-- statscore = get_statscore()
+
+-- bar_start()
+-- for line in io.lines() do
+-- 	---@cast line string
+
+--  if line:find('"event":%s*"volume"') then
+-- 		volume_val, volume_is_muted = get_volume_and_muted()
+-- 	end
+
+-- 	bar_flush({
+-- 		{ { line } },
+-- 		{ net() },
+-- 		{ temp() },
+-- 		{ bat() },
+-- 		{ cpu(), mem(), disk() },
+-- 	})
+-- end
+
+return bar_run({
+	-- { net },
+	-- { temp },
+	{ bat },
+	-- { cpu, mem, disk },
+	{ brightness, volume, updates_count, clock },
+})
