@@ -1,4 +1,7 @@
 table.unpack = table.unpack or unpack
+table.pack = table.pack or function(...)
+	return { n = select("#", ...), ... }
+end
 local posix = require("posix")
 
 local USE_PANGO = true
@@ -129,8 +132,10 @@ end
 ---@alias PosixFile table
 
 ---@class Pipe
----@field file PosixFile
+---@field _file PosixFile
+---@field _buf string[]
 Pipe = {}
+Pipe.__index = Pipe
 
 ---@param file PosixFile
 ---@return Pipe
@@ -143,7 +148,8 @@ function Pipe:new(file)
 
 	---@type Pipe
 	local s = setmetatable({}, self)
-	s.file = file
+	s._file = file
+	s._buf = {}
 	return s
 end
 
@@ -153,11 +159,37 @@ function Pipe:transform(line)
 	return line
 end
 
+---@return string? line the line, or `nil` if no full line is available inside the pipe
+---@return string? err the error message in case of some failure (except `WOULDBLOCK`)
+function Pipe:read_line()
+	while true do
+		---@type string
+		local str, err, errno = posix.unistd.read(self._file.fd, 4096)
+		if not str then
+			return nil, errno ~= posix.errno.EWOULDBLOCK and err or nil
+		end
+
+		local linebreak_start, linebreak_end = str:find("%s*\n%s*")
+		if linebreak_start and linebreak_end then
+			local old_buf
+			old_buf, self._buf = self._buf, {}
+
+			old_buf[#old_buf + 1], self._buf[#self._buf + 1] =
+				str:sub(1, linebreak_start - 1), str:sub(linebreak_end + 1, -1)
+
+			return table.concat(old_buf)
+		else
+			self._buf[#self._buf + 1] = str
+		end
+	end
+end
+
 --- pipe poll ---
 
 ---@class PipePoll
 ---@field _fds table
 PipePoll = {}
+PipePoll.__index = PipePoll
 
 ---@param pipes Pipe[]
 ---@return PipePoll
@@ -165,7 +197,7 @@ function PipePoll:new(pipes)
 	---@type table
 	local fds = {}
 	for _, pipe in pairs(pipes) do
-		fds[pipe.file.fd] = { pipe = pipe, events = { IN = true }, revents = { IN = false } }
+		fds[pipe._file.fd] = { pipe = pipe, events = { IN = true }, revents = { IN = false } }
 	end
 
 	---@type PipePoll
@@ -191,39 +223,6 @@ function PipePoll:__call(timeout)
 	return pipes
 end
 
-local read_line_nonblock = (function()
-	---@type string[][]
-	local bufs = {}
-
-	---@param fd PosixFile
-	---@return string?
-	return function(fd)
-		local buf = bufs[fd] or {}
-
-		---@type string?
-		local res
-
-		---@type string
-		local str = posix.unistd.read(fd, 4096)
-		if not str then
-			return
-		end
-
-		local newline_pos = str:find("\n")
-		if newline_pos then
-			local rem
-			buf[#buf + 1], rem = str:sub(1, newline_pos - 1), str:sub(newline_pos + 1, -1)
-			res = table.concat(buf, nil)
-			buf = { rem }
-		else
-			buf[#buf + 1] = str
-		end
-
-		bufs[fd] = buf
-		return res
-	end
-end)()
-
 --- section ---
 
 ---@alias SectionRender {[integer]: string, color: string?}
@@ -231,6 +230,7 @@ end)()
 ---@class Section
 ---@field source number|Pipe
 Section = {}
+Section.__index = Section
 
 ---@param source number|Pipe
 ---@return Section
@@ -248,18 +248,18 @@ function Section:format(...) end
 ---@param color string?
 ---@param do_show_sep boolean?
 ---@return string
-local function section_render_to_json(text, color, do_show_sep)
+local function section_render_tojson(text, color, do_show_sep)
 	---@param s string?
 	---@return string
-	local function string_or_nil_to_json(s)
+	local function string_or_nil_tojson(s)
 		return s and string.format("%q", s):gsub("\\\n", "\\n") or "null"
 	end
 
 	return string.format(
 		'{"full_text": %s, "color": %s, "markup": %s, "separator_block_width": %d, "separator": %s}',
-		string_or_nil_to_json(text),
-		string_or_nil_to_json(color),
-		string_or_nil_to_json(USE_PANGO and "pango" or nil),
+		string_or_nil_tojson(text),
+		string_or_nil_tojson(color),
+		string_or_nil_tojson(USE_PANGO and "pango" or nil),
 		do_show_sep and GROUP_SEP_WIDTH or SEP_WIDTH,
 		do_show_sep and "true" or "false"
 	)
@@ -267,14 +267,14 @@ end
 
 --- bar ---
 
----@param groups Section[][]
-local function bar_run(groups)
+---@param sections Section[][]
+local function bar_run(sections)
 	io.write('{"version": 1, "click_events": true}', "\n")
 	io.write("[", "\n")
 	io.flush()
 
 	local pipes = {}
-	for _, group in pairs(groups) do
+	for _, group in pairs(sections) do
 		for _, section in pairs(group) do
 			if type(section.source) ~= "number" then
 				pipes[#pipes + 1] = section.source
@@ -284,49 +284,48 @@ local function bar_run(groups)
 	local pipe_poll = PipePoll:new(pipes)
 
 	---@type SectionRender[][]
-	local rendered_groups = {}
+	local section_renders = {}
 	while true do
 		local nonempty_pipes = pipe_poll(1) -- TODO wait until the closest time source
 
-		for i, group in pairs(groups) do
-			for j, section in pairs(group) do
+		for i, group in ipairs(sections) do
+			for j, section in ipairs(group) do
 				---@type any
 				local data
 
 				local source = section.source
 				if type(source) ~= "number" then
 					if nonempty_pipes[source] then
-						-- TODO!!
-						local line = read_line_nonblock(source.file.fd)
-						data = line and { source:transform(line) }
+						-- TODO should probably be done inside the Pipe:
+						local line = source:read_line()
+						data = line and table.pack(source:transform(line))
 					end
 				elseif os.time() % source == 0 then
 					data = os.time()
 					data = { data }
 				end
 
-				rendered_groups[i] = rendered_groups[i] or {}
-				if data then
-					rendered_groups[i][j] = section.format(table.unpack(data)) or {}
-				else
-					rendered_groups[i][j] = rendered_groups[i][j] or {}
-				end
+				local section_render = data and section:format(table.unpack(data, nil, data.n))
+
+				-- we must set those to truthy, so nothing is skipped by `ipairs`
+				section_renders[i] = section_renders[i] or {}
+				section_renders[i][j] = section_render or section_renders[i][j] or {}
 			end
 		end
 
-		local json_sections = {}
-		for _, group in pairs(rendered_groups) do
-			for j, section in pairs(group) do
-				local text = #section > 0 and table.concat(section, " ") or nil
-				text = text and DEFAULT_PREFIX .. text .. DEFAULT_POSTFIX
+		local section_jsons = {}
+		for _, group in ipairs(section_renders) do
+			for j, section_render in ipairs(group) do
+				---@type string?, string?
+				local text, color =
+					#section_render > 0 and table.concat(section_render, " ") or nil,
+					section_render.color and section_render.color:match("^#%x%x%x%x%x%x%x?%x?$")
 
-				---@type string?
-				local color = section.color and section.color:match("^#%x%x%x%x%x%x%x?%x?$")
-
-				json_sections[#json_sections + 1] = text and section_render_to_json(text, color, j == #group)
+				section_jsons[#section_jsons + 1] = text
+					and section_render_tojson(DEFAULT_PREFIX .. text .. DEFAULT_POSTFIX, color, j == #group)
 			end
 		end
-		io.write("[" .. table.concat(json_sections, ",") .. "],", "\r\n")
+		io.write("[" .. table.concat(section_jsons, ",") .. "],", "\n")
 		io.flush()
 	end
 end
@@ -360,9 +359,9 @@ local volume_pipe = Pipe:new(posix.popen({
 	"-c",
 	[[
 	function get-volume-and-muted {
-      volume=$(pactl get-sink-volume @DEFAULT_SINK@ | cut -F5)
-      mute=$(pactl get-sink-mute @DEFAULT_SINK@)
-      echo ${volume%%%} ${mute##Mute: }
+		volume=$(pactl get-sink-volume @DEFAULT_SINK@ | cut -F5)
+		mute=$(pactl get-sink-mute @DEFAULT_SINK@)
+		echo ${volume%%%} ${mute##Mute: }
 	}
 
 	get-volume-and-muted
@@ -394,7 +393,7 @@ local statscore_pipe = Pipe:new(posix.popen({
 	"-c",
 	[[
   while :; do 
-    cat /run/user/10000/statscore.lua && echo 
+    cat /run/user/1000/statscore.lua
 		sleep 4
   done
   ]],
