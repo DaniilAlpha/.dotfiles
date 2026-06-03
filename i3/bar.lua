@@ -345,10 +345,10 @@ local updates_count_pipe = Pipe:new(posix.popen({
 	}
 
 	get-updates-count
-  inotifywait -qm -eclose_write /tmp/update_checker_count | while read -r _; do 
+	inotifywait -qm -eclose_write /tmp/update_checker_count | while read -r _; do 
 		get-updates-count
-  done
-  ]],
+	done
+	]],
 }, "r"))
 function updates_count_pipe:transform(line)
 	return tonumber(line)
@@ -365,10 +365,10 @@ local volume_pipe = Pipe:new(posix.popen({
 	}
 
 	get-volume-and-muted
-  pactl subscribe | while read -r line; do
-    [ "${line#*on sink}" != "$line" ] && get-volume-and-muted
-  done
-  ]],
+	pactl subscribe | while read -r line; do
+		[ "${line#*on sink}" != "$line" ] && get-volume-and-muted
+	done
+	]],
 }, "r"))
 function volume_pipe:transform(line)
 	local volume, mute = line:match("^(%d+)%s*(%w+)$")
@@ -379,10 +379,10 @@ local brightness_pipe = Pipe:new(posix.popen({
 	"sh",
 	"-c",
 	[[
-  script -qc "udevadm monitor --udev --subsystem=backlight" /dev/null | while read -r _; do
-    echo $(( 100 * $(brightnessctl g) / $(brightnessctl m) ))
-  done
-  ]],
+	script -qc "udevadm monitor --udev --subsystem=backlight" /dev/null | while read -r _; do
+		echo $(( 100 * $(brightnessctl g) / $(brightnessctl m) ))
+	done
+	]],
 }, "r"))
 function brightness_pipe:transform(line)
 	return tonumber(line)
@@ -392,11 +392,11 @@ local statscore_pipe = Pipe:new(posix.popen({
 	"sh",
 	"-c",
 	[[
-  while :; do 
-    cat /run/user/1000/statscore.lua
+	while :; do 
+		cat /run/user/10000/statscore.lua && printf "\n"
 		sleep 4
-  done
-  ]],
+	done
+	]],
 }, "r"))
 function statscore_pipe:transform(line)
 	local env = {}
@@ -426,7 +426,7 @@ end
 
 local clock = Section:new(10)
 function clock:format(time)
-	return time and { "󰃭", os.date("%d %b  ·  %H:%M", time) }
+	return time and { "󰃭", os.date("%d %b	·	%H:%M", time) }
 end
 
 local updates_count = Section:new(updates_count_pipe)
