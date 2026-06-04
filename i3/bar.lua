@@ -137,9 +137,13 @@ end
 Pipe = {}
 Pipe.__index = Pipe
 
----@param file PosixFile
+---@param file PosixFile|string
 ---@return Pipe
 function Pipe:new(file)
+	if type(file) == "string" then
+		file = posix.popen({ "sh", "-c", file }, "r")
+	end
+
 	posix.fcntl.fcntl(
 		file.fd,
 		posix.fcntl.F_SETFL,
@@ -159,14 +163,14 @@ function Pipe:transform(line)
 	return line
 end
 
----@return string? line the line, or `nil` if no full line is available inside the pipe
----@return string? err the error message in case of some failure (except `WOULDBLOCK`)
+---@return string? line line, or `nil` if no full line is available inside the pipe
+---@return string? err error message in case of some failure (except EWOULDBLOCK)
 function Pipe:read_line()
 	while true do
 		---@type string
 		local str, err, errno = posix.unistd.read(self._file.fd, 4096)
 		if not str then
-			return nil, errno ~= posix.errno.EWOULDBLOCK and err or nil
+			return nil, (errno ~= posix.errno.EWOULDBLOCK or nil) and err
 		end
 
 		local linebreak_start, linebreak_end = str:find("%s*\n%s*")
@@ -186,46 +190,40 @@ end
 
 --- pipe poll ---
 
----@class PipePoll
----@field _fds table
-PipePoll = {}
-PipePoll.__index = PipePoll
-
 ---@param pipes Pipe[]
----@return PipePoll
-function PipePoll:new(pipes)
+---@param timeout number? - in seconds
+---@return {[Pipe]: boolean}, {[Pipe]: boolean}
+local function poll_pipes(pipes, timeout)
 	---@type table
 	local fds = {}
 	for _, pipe in pairs(pipes) do
-		fds[pipe._file.fd] = { pipe = pipe, events = { IN = true }, revents = { IN = false } }
+		fds[pipe._file.fd] = { pipe = pipe, events = { IN = true, HUP = true, ERR = true, NVAL = true }, revents = {} }
 	end
 
-	---@type PipePoll
-	local s = setmetatable({}, self)
-	s._fds = fds
-	return s
-end
+	---@type {[Pipe]: boolean}, {[Pipe]: boolean}
+	local nonempty_pipes, dead_pipes = {}, {}
 
----@param timeout number? - in seconds
----@return {[Pipe]: boolean}
-function PipePoll:__call(timeout)
-	local pipes = {}
-
-	local count = posix.poll.poll(self._fds, timeout and timeout * 1000)
+	local count = posix.poll.poll(fds, timeout and timeout * 1000)
 	if count > 0 then
-		for _, info in pairs(self._fds) do
-			if info.revents.IN then
-				pipes[info.pipe] = true
+		for _, info in pairs(fds) do
+			if info.revents.ERR or info.revents.NVAL then
+				dead_pipes[info.pipe] = true
+			elseif info.revents.IN then
+				nonempty_pipes[info.pipe] = true
+			elseif info.revents.HUP then
+				dead_pipes[info.pipe] = true
 			end
 		end
 	end
 
-	return pipes
+	return nonempty_pipes, dead_pipes
 end
 
 --- section ---
 
----@alias SectionRender {[integer]: string, color: string?}
+---@class SectionContent
+---@field color string?
+---@field [integer] string
 
 ---@class Section
 ---@field source number|Pipe
@@ -241,7 +239,7 @@ function Section:new(source)
 end
 
 ---@vararg any
----@return SectionRender?
+---@return SectionContent?
 function Section:format(...) end
 
 ---@param text string
@@ -252,14 +250,15 @@ local function section_render_tojson(text, color, do_show_sep)
 	---@param s string?
 	---@return string
 	local function string_or_nil_tojson(s)
-		return s and string.format("%q", s):gsub("\\\n", "\\n") or "null"
+		return s and string.format("%q", s):gsub("\\\n", "\\n"):gsub("\\9", "\\t"):gsub("\\13", "\\r"):gsub("\\%d+", "")
+			or "null"
 	end
 
 	return string.format(
 		'{"full_text": %s, "color": %s, "markup": %s, "separator_block_width": %d, "separator": %s}',
 		string_or_nil_tojson(text),
 		string_or_nil_tojson(color),
-		string_or_nil_tojson(USE_PANGO and "pango" or nil),
+		string_or_nil_tojson((USE_PANGO or nil) and "pango"),
 		do_show_sep and GROUP_SEP_WIDTH or SEP_WIDTH,
 		do_show_sep and "true" or "false"
 	)
@@ -273,20 +272,34 @@ local function bar_run(sections)
 	io.write("[", "\n")
 	io.flush()
 
+	---@type {[integer]: Pipe}
 	local pipes = {}
 	for _, group in pairs(sections) do
 		for _, section in pairs(group) do
-			if type(section.source) ~= "number" then
-				pipes[#pipes + 1] = section.source
+			local source = section.source
+			if type(source) ~= "number" then
+				pipes[#pipes + 1] = source
 			end
 		end
 	end
-	local pipe_poll = PipePoll:new(pipes)
 
-	---@type SectionRender[][]
-	local section_renders = {}
+	---@type SectionContent[][]
+	local contents = {}
 	while true do
-		local nonempty_pipes = pipe_poll(1) -- TODO wait until the closest time source
+		local nonempty_pipes, dead_pipes = poll_pipes(pipes, 1) -- TODO wait until the closest time source
+
+		local pipe_datas = {}
+		for i = #pipes, 1, -1 do
+			local pipe = pipes[i]
+
+			if dead_pipes[pipe] then
+				table.remove(pipes, i)
+			elseif nonempty_pipes[pipe] then
+				-- TODO should probably be done inside the Pipe:
+				local line = pipe:read_line()
+				pipe_datas[pipe] = line and table.pack(pipe:transform(line)) or pipe_datas[pipe]
+			end
+		end
 
 		for i, group in ipairs(sections) do
 			for j, section in ipairs(group) do
@@ -296,36 +309,50 @@ local function bar_run(sections)
 				local source = section.source
 				if type(source) ~= "number" then
 					if nonempty_pipes[source] then
-						-- TODO should probably be done inside the Pipe:
-						local line = source:read_line()
-						data = line and table.pack(source:transform(line))
+						data = pipe_datas[source]
 					end
 				elseif os.time() % source == 0 then
 					data = os.time()
 					data = { data }
 				end
 
-				local section_render = data and section:format(table.unpack(data, nil, data.n))
+				-- TODO implement default values (e.g. for clock - just pass the current time, not caring if it's a multiple of seconds, for pipe sections - nil instead of data (though will need to handle multiple args))
+
+				local content = data and section:format(table.unpack(data, nil, data.n))
 
 				-- we must set those to truthy, so nothing is skipped by `ipairs`
-				section_renders[i] = section_renders[i] or {}
-				section_renders[i][j] = section_render or section_renders[i][j] or {}
+				contents[i] = contents[i] or {}
+				contents[i][j] = content or contents[i][j] or {}
+				-- TODO temporary to serve as an indicator when i crash the pipe unexpectadly
+				if dead_pipes[source] then
+					contents[i][j][1] = "[crashed]" .. (contents[i][j][1] or "")
+					contents[i][j].color = "#FF00FF"
+				end
 			end
 		end
 
-		local section_jsons = {}
-		for _, group in ipairs(section_renders) do
-			for j, section_render in ipairs(group) do
-				---@type string?, string?
-				local text, color =
-					#section_render > 0 and table.concat(section_render, " ") or nil,
-					section_render.color and section_render.color:match("^#%x%x%x%x%x%x%x?%x?$")
-
-				section_jsons[#section_jsons + 1] = text
-					and section_render_tojson(DEFAULT_PREFIX .. text .. DEFAULT_POSTFIX, color, j == #group)
+		---@type {text: string, color: string?, do_show_sep?: boolean}[]
+		local renders = {}
+		for _, group in ipairs(contents) do
+			for _, content in ipairs(group) do
+				renders[#renders + 1] = content
+					and (#content > 0 or nil)
+					and {
+						text = DEFAULT_PREFIX .. table.concat(content, " ") .. DEFAULT_POSTFIX,
+						color = content.color and content.color:match("^#%x%x%x%x%x%x%x?%x?$"),
+					}
+			end
+			if #renders > 0 then
+				renders[#renders].do_show_sep = true
 			end
 		end
-		io.write("[" .. table.concat(section_jsons, ",") .. "],", "\n")
+
+		---@type string[]
+		local jsons = {}
+		for _, render in ipairs(renders) do
+			jsons[#jsons + 1] = section_render_tojson(render.text, render.color, render.do_show_sep)
+		end
+		io.write("[" .. table.concat(jsons, ",") .. "],", "\n")
 		io.flush()
 	end
 end
@@ -336,28 +363,21 @@ end
 
 --- pipes ---
 
-local updates_count_pipe = Pipe:new(posix.popen({
-	"sh",
-	"-c",
-	[[
+local updates_count_pipe = Pipe:new([[
 	function get-updates-count {
 		cat /tmp/update_checker_count;
 	}
 
 	get-updates-count
-	inotifywait -qm -eclose_write /tmp/update_checker_count | while read -r _; do 
+	inotifyd echo /tmp/update_checker_count:w | while read -r _; do 
 		get-updates-count
 	done
-	]],
-}, "r"))
+]])
 function updates_count_pipe:transform(line)
 	return tonumber(line)
 end
 
-local volume_pipe = Pipe:new(posix.popen({
-	"sh",
-	"-c",
-	[[
+local volume_pipe = Pipe:new([[
 	function get-volume-and-muted {
 		volume=$(pactl get-sink-volume @DEFAULT_SINK@ | cut -F5)
 		mute=$(pactl get-sink-mute @DEFAULT_SINK@)
@@ -368,36 +388,27 @@ local volume_pipe = Pipe:new(posix.popen({
 	pactl subscribe | while read -r line; do
 		[ "${line#*on sink}" != "$line" ] && get-volume-and-muted
 	done
-	]],
-}, "r"))
+]])
 function volume_pipe:transform(line)
 	local volume, mute = line:match("^(%d+)%s*(%w+)$")
 	return volume, mute == "yes"
 end
 
-local brightness_pipe = Pipe:new(posix.popen({
-	"sh",
-	"-c",
-	[[
-	script -qc "udevadm monitor --udev --subsystem=backlight" /dev/null | while read -r _; do
+local brightness_pipe = Pipe:new([[
+	script -qc "udevadm monitor --udev --subsystem-match=backlight" /dev/null | while read -r _; do
 		echo $(( 100 * $(brightnessctl g) / $(brightnessctl m) ))
 	done
-	]],
-}, "r"))
+]])
 function brightness_pipe:transform(line)
 	return tonumber(line)
 end
 
-local statscore_pipe = Pipe:new(posix.popen({
-	"sh",
-	"-c",
-	[[
+local statscore_pipe = Pipe:new([[
 	while :; do 
 		cat /run/user/10000/statscore.lua && printf "\n"
-		sleep 4
+		inotifyd echo /run/user/10000/statscore.lua:x
 	done
-	]],
-}, "r"))
+]])
 function statscore_pipe:transform(line)
 	local env = {}
 
@@ -424,14 +435,14 @@ end
 
 --- sections ---
 
-local clock = Section:new(10)
+local clock = Section:new(60)
 function clock:format(time)
-	return time and { "󰃭", os.date("%d %b	·	%H:%M", time) }
+	return time and { "󰃭", os.date("%d %b · %H:%M", time) }
 end
 
 local updates_count = Section:new(updates_count_pipe)
 function updates_count:format(value)
-	return value and value > 0 and { "󰑐", tostring(value) } or nil
+	return value and (value > 0 or nil) and { "󰑐", tostring(value) }
 end
 
 local volume = Section:new(volume_pipe)
