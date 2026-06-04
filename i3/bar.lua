@@ -163,9 +163,9 @@ function Pipe:transform(line)
 	return line
 end
 
----@return string? line line, or `nil` if no full line is available inside the pipe
+---@return {[integer]: any, n: integer}? data_table list, containing data returned by the pipe's `_transform` function, or `nil` if unavailable
 ---@return string? err error message in case of some failure (except EWOULDBLOCK)
-function Pipe:read_line()
+function Pipe:read()
 	while true do
 		---@type string
 		local str, err, errno = posix.unistd.read(self._file.fd, 4096)
@@ -181,7 +181,7 @@ function Pipe:read_line()
 			old_buf[#old_buf + 1], self._buf[#self._buf + 1] =
 				str:sub(1, linebreak_start - 1), str:sub(linebreak_end + 1, -1)
 
-			return table.concat(old_buf)
+			return table.pack(self:transform(table.concat(old_buf)))
 		else
 			self._buf[#self._buf + 1] = str
 		end
@@ -289,15 +289,11 @@ local function bar_run(sections)
 		local nonempty_pipes, dead_pipes = poll_pipes(pipes, 1) -- TODO wait until the closest time source
 
 		local pipe_datas = {}
-		for i = #pipes, 1, -1 do
-			local pipe = pipes[i]
-
+		for i, pipe in pipes do
 			if dead_pipes[pipe] then
-				table.remove(pipes, i)
+				pipes[i] = nil
 			elseif nonempty_pipes[pipe] then
-				-- TODO should probably be done inside the Pipe:
-				local line = pipe:read_line()
-				pipe_datas[pipe] = line and table.pack(pipe:transform(line)) or pipe_datas[pipe]
+				pipe_datas[pipe] = pipe:read() or pipe_datas[pipe]
 			end
 		end
 
@@ -323,6 +319,7 @@ local function bar_run(sections)
 				-- we must set those to truthy, so nothing is skipped by `ipairs`
 				contents[i] = contents[i] or {}
 				contents[i][j] = content or contents[i][j] or {}
+
 				-- TODO temporary to serve as an indicator when i crash the pipe unexpectadly
 				if dead_pipes[source] then
 					contents[i][j][1] = "[crashed]" .. (contents[i][j][1] or "")
