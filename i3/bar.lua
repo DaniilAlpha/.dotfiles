@@ -403,7 +403,7 @@ end
 local statscore_pipe = Pipe:new([[
 	while :; do 
 		cat /run/user/10000/statscore.lua && printf "\n"
-		inotifyd echo /run/user/10000/statscore.lua:x
+		inotifyd echo /run/user/10000/statscore.lua:x &> /dev/null
 	done
 ]])
 function statscore_pipe:transform(line)
