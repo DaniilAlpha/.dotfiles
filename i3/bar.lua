@@ -289,7 +289,7 @@ local function bar_run(sections)
 		local nonempty_pipes, dead_pipes = poll_pipes(pipes, 1) -- TODO wait until the closest time source
 
 		local pipe_datas = {}
-		for i, pipe in pipes do
+		for i, pipe in pairs(pipes) do
 			if dead_pipes[pipe] then
 				pipes[i] = nil
 			elseif nonempty_pipes[pipe] then
