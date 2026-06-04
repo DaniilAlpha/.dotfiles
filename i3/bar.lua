@@ -314,7 +314,7 @@ local function bar_run(sections)
 
 				-- TODO implement default values (e.g. for clock - just pass the current time, not caring if it's a multiple of seconds, for pipe sections - nil instead of data (though will need to handle multiple args))
 
-				local content = data and section:format(table.unpack(data, nil, data.n))
+				local content = data and (section:format(table.unpack(data, nil, data.n)) or {})
 
 				-- we must set those to truthy, so nothing is skipped by `ipairs`
 				contents[i] = contents[i] or {}
