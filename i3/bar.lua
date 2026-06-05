@@ -134,26 +134,28 @@ end
 ---@class Pipe
 ---@field _file PosixFile
 ---@field _buf string[]
+---@field _is_ppipe boolean
 Pipe = {}
 Pipe.__index = Pipe
 
----@param file PosixFile|string
+---@param cmd string
 ---@return Pipe
-function Pipe:new(file)
-	if type(file) == "string" then
-		file = posix.popen({ "sh", "-c", file }, "r")
+function Pipe:new(cmd)
+	if type(cmd) == "string" then
+		cmd = posix.popen({ "sh", "-c", cmd }, "r")
 	end
 
 	posix.fcntl.fcntl(
-		file.fd,
+		cmd.fd,
 		posix.fcntl.F_SETFL,
-		posix.fcntl.fcntl(file.fd, posix.fcntl.F_GETFL) + posix.fcntl.O_NONBLOCK
+		posix.fcntl.fcntl(cmd.fd, posix.fcntl.F_GETFL) + posix.fcntl.O_NONBLOCK
 	)
 
 	---@type Pipe
 	local s = setmetatable({}, self)
-	s._file = file
+	s._file = cmd
 	s._buf = {}
+	s._is_ppipe = true -- TODO might not be the case in the future
 	return s
 end
 
@@ -188,11 +190,25 @@ function Pipe:read()
 	end
 end
 
+---@return boolean, string?, integer?
+function Pipe:_close()
+	if self._is_ppipe then
+		local reason, code = posix.pclose(self._file)
+		if reason ~= "exited" or code ~= 0 then
+			return false, reason, code
+		end
+	end
+
+	return true
+end
+
 --- pipe poll ---
 
 ---@param pipes Pipe[]
 ---@param timeout number? - in seconds
----@return {[Pipe]: boolean}, {[Pipe]: boolean}
+---@return {[Pipe]: boolean} nonempty_pipes contains pipes that have any data in them
+---@return {[Pipe]: boolean} closed_pipes contains all pipes that will no longer return data (including crashed ones)
+---@return {[Pipe]: boolean} crashed_pipes contains only pipes that had some kind of error, or exited with non-0 code
 local function poll_pipes(pipes, timeout)
 	---@type table
 	local fds = {}
@@ -200,23 +216,28 @@ local function poll_pipes(pipes, timeout)
 		fds[pipe._file.fd] = { pipe = pipe, events = { IN = true, HUP = true, ERR = true, NVAL = true }, revents = {} }
 	end
 
-	---@type {[Pipe]: boolean}, {[Pipe]: boolean}
-	local nonempty_pipes, dead_pipes = {}, {}
+	---@type {[Pipe]: boolean}, {[Pipe]: boolean}, {[Pipe]: boolean}
+	local nonempty_pipes, closed_pipes, crashed_pipes = {}, {}, {}
 
 	local count = posix.poll.poll(fds, timeout and timeout * 1000)
 	if count > 0 then
 		for _, info in pairs(fds) do
 			if info.revents.ERR or info.revents.NVAL then
-				dead_pipes[info.pipe] = true
+				closed_pipes[info.pipe] = true
 			elseif info.revents.IN then
 				nonempty_pipes[info.pipe] = true
 			elseif info.revents.HUP then
-				dead_pipes[info.pipe] = true
+				closed_pipes[info.pipe] = true
+			end
+
+			if closed_pipes[info.pipe] then
+				local ok = info.pipe:_close()
+				crashed_pipes[info.pipe] = not ok
 			end
 		end
 	end
 
-	return nonempty_pipes, dead_pipes
+	return nonempty_pipes, closed_pipes, crashed_pipes
 end
 
 --- section ---
@@ -241,6 +262,13 @@ end
 ---@vararg any
 ---@return SectionContent?
 function Section:format(...) end
+
+---@param args table
+---@return SectionContent
+function Section:content(args)
+	-- if format returns `nil`, set to empty to replace the old value
+	return self:format(table.unpack(args, nil, args.n)) or {}
+end
 
 ---@param text string
 ---@param color string?
@@ -285,12 +313,31 @@ local function bar_run(sections)
 
 	---@type SectionContent[][]
 	local contents = {}
+	for i, group in ipairs(sections) do
+		contents[i] = {}
+		for j, section in ipairs(group) do
+			local source = section.source
+
+			---@type any
+			local data
+			if type(source) ~= "number" then
+				data = {}
+			else
+				data = { os.time() }
+			end
+
+			contents[i][j] = section:content(data)
+		end
+	end
+
 	while true do
-		local nonempty_pipes, dead_pipes = poll_pipes(pipes, 1) -- TODO wait until the closest time source
+		local nonempty_pipes, closed_pipes, crashed_pipes = poll_pipes(pipes, 1) -- TODO wait until the closest time source
+
+		local time = os.time()
 
 		local pipe_datas = {}
 		for i, pipe in pairs(pipes) do
-			if dead_pipes[pipe] then
+			if closed_pipes[pipe] then
 				pipes[i] = nil
 			elseif nonempty_pipes[pipe] then
 				pipe_datas[pipe] = pipe:read() or pipe_datas[pipe]
@@ -299,30 +346,24 @@ local function bar_run(sections)
 
 		for i, group in ipairs(sections) do
 			for j, section in ipairs(group) do
+				local source = section.source
+
 				---@type any
 				local data
-
-				local source = section.source
 				if type(source) ~= "number" then
 					if nonempty_pipes[source] then
 						data = pipe_datas[source]
 					end
-				elseif os.time() % source == 0 then
-					data = os.time()
-					data = { data }
+				elseif time % source == 0 then
+					data = { time }
 				end
 
-				-- TODO implement default values (e.g. for clock - just pass the current time, not caring if it's a multiple of seconds, for pipe sections - nil instead of data (though will need to handle multiple args))
+				if data then
+					contents[i][j] = section:content(data)
+				end
 
-				local content = data and (section:format(table.unpack(data, nil, data.n)) or {})
-
-				-- we must set those to truthy, so nothing is skipped by `ipairs`
-				contents[i] = contents[i] or {}
-				contents[i][j] = content or contents[i][j] or {}
-
-				-- TODO temporary to serve as an indicator when i crash the pipe unexpectadly
-				if dead_pipes[source] then
-					contents[i][j][1] = "[crashed]" .. (contents[i][j][1] or "")
+				if crashed_pipes[source] then
+					contents[i][j][#contents[i][j] + 1] = "[crashed]"
 					contents[i][j].color = "#FF00FF"
 				end
 			end
@@ -361,21 +402,21 @@ end
 --- pipes ---
 
 local updates_count_pipe = Pipe:new([[
-	function get-updates-count {
-		cat /tmp/update_checker_count;
-	}
+	get-updates-count() { cat /tmp/update_checker_count; }
 
 	get-updates-count
 	inotifyd echo /tmp/update_checker_count:w | while read -r _; do 
 		get-updates-count
 	done
+	exit 1
 ]])
+---@return integer?
 function updates_count_pipe:transform(line)
 	return tonumber(line)
 end
 
 local volume_pipe = Pipe:new([[
-	function get-volume-and-muted {
+	get-volume-and-muted() {
 		volume=$(pactl get-sink-volume @DEFAULT_SINK@ | cut -F5)
 		mute=$(pactl get-sink-mute @DEFAULT_SINK@)
 		echo ${volume%%%} ${mute##Mute: }
@@ -386,9 +427,10 @@ local volume_pipe = Pipe:new([[
 		[ "${line#*on sink}" != "$line" ] && get-volume-and-muted
 	done
 ]])
+---@return integer?, boolean?
 function volume_pipe:transform(line)
 	local volume, mute = line:match("^(%d+)%s*(%w+)$")
-	return volume, mute == "yes"
+	return volume, mute and mute == "yes"
 end
 
 local brightness_pipe = Pipe:new([[
@@ -396,6 +438,7 @@ local brightness_pipe = Pipe:new([[
 		echo $(( 100 * $(brightnessctl g) / $(brightnessctl m) ))
 	done
 ]])
+---@return integer?
 function brightness_pipe:transform(line)
 	return tonumber(line)
 end
@@ -406,6 +449,7 @@ local statscore_pipe = Pipe:new([[
 		inotifyd echo /run/user/10000/statscore.lua:x &> /dev/null
 	done
 ]])
+---@return table?, string?
 function statscore_pipe:transform(line)
 	local env = {}
 
@@ -433,21 +477,26 @@ end
 --- sections ---
 
 local clock = Section:new(60)
+---@param time integer
 function clock:format(time)
-	return time and { "󰃭", os.date("%d %b · %H:%M", time) }
+	return { "󰃭", os.date("%d %b · %H:%M", time) }
 end
 
 local updates_count = Section:new(updates_count_pipe)
+---@param value integer?
 function updates_count:format(value)
 	return value and (value > 0 or nil) and { "󰑐", tostring(value) }
 end
 
 local volume = Section:new(volume_pipe)
+---@param value integer?
+---@param is_muted boolean?
 function volume:format(value, is_muted)
 	return value and { is_muted and "󰝟" or rank_strs(value / 100, { "󰕿", "󰖀", "󰕾" }), value .. "%" }
 end
 
 local brightness = Section:new(brightness_pipe)
+---@param value integer?
 function brightness:format(value)
 	return value and { rank_strs(value / 100, { "󰃞", "󰃟", "󰃠" }), value .. "%" }
 end
@@ -457,6 +506,7 @@ end
 ---@field risk number
 
 local disk = Section:new(statscore_pipe)
+---@param statscore table?
 function disk:format(statscore, _)
 	---@type Stats<integer>?
 	local rootfs = table.get_in(statscore, "fs", "/")
@@ -470,6 +520,7 @@ function disk:format(statscore, _)
 end
 
 local mem = Section:new(statscore_pipe)
+---@param statscore table?
 function mem:format(statscore, _)
 	---@type Stats<integer>?, Stats<integer>?
 	local ram, swap = table.get_in(statscore, "ram"), table.get_in(statscore, "swap")
@@ -486,6 +537,7 @@ function mem:format(statscore, _)
 end
 
 local cpu = Section:new(statscore_pipe)
+---@param statscore table?
 function cpu:format(statscore, _)
 	---@type Stats<number>?
 	local cpu_load = table.get_in(statscore, "cpu_load")
@@ -499,6 +551,7 @@ function cpu:format(statscore, _)
 end
 
 local bat = Section:new(statscore_pipe)
+---@param statscore table?
 function bat:format(statscore, _)
 	---@alias BatStats Stats<{charge: integer, rate: number}>
 	---@type BatStats?, {[string]: BatStats}?
@@ -525,6 +578,7 @@ function bat:format(statscore, _)
 end
 
 local temp = Section:new(statscore_pipe)
+---@param statscore table?
 function temp:format(statscore, _)
 	---@type {[string]: Stats<number>}?
 	local temps = table.get_in(statscore, "temps")
@@ -550,6 +604,7 @@ function temp:format(statscore, _)
 end
 
 local net = Section:new(statscore_pipe)
+---@param statscore table?
 function net:format(statscore, _)
 	---@type {[string]: Stats<number>}?
 	local netfaces = table.get_in(statscore, "netfaces")
