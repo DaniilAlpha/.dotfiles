@@ -300,16 +300,20 @@ local function bar_run(sections)
 	io.write("[", "\n")
 	io.flush()
 
-	---@type {[integer]: Pipe}
-	local pipes = {}
+	---@type {[integer]: Pipe}, integer[]
+	local pipes, periods = {}, {}
 	for _, group in pairs(sections) do
 		for _, section in pairs(group) do
 			local source = section.source
 			if type(source) ~= "number" then
 				pipes[#pipes + 1] = source
+			else
+				periods[#periods + 1] = source
 			end
 		end
 	end
+
+	local time = os.time()
 
 	---@type SectionContent[][]
 	local contents = {}
@@ -323,7 +327,7 @@ local function bar_run(sections)
 			if type(source) ~= "number" then
 				data = {}
 			else
-				data = { os.time() }
+				data = { time }
 			end
 
 			contents[i][j] = section:content(data)
@@ -331,9 +335,17 @@ local function bar_run(sections)
 	end
 
 	while true do
-		local nonempty_pipes, closed_pipes, crashed_pipes = poll_pipes(pipes, 1) -- TODO wait until the closest time source
+		time = os.time()
 
-		local time = os.time()
+		local closest_rem_time = math.huge
+		for _, period in pairs(periods) do
+			local rem_time = period - time % period
+			if rem_time < closest_rem_time then
+				closest_rem_time = rem_time
+			end
+		end
+
+		local nonempty_pipes, closed_pipes, crashed_pipes = poll_pipes(pipes, closest_rem_time)
 
 		local pipe_datas = {}
 		for i, pipe in pairs(pipes) do
@@ -343,6 +355,8 @@ local function bar_run(sections)
 				pipe_datas[pipe] = pipe:read() or pipe_datas[pipe]
 			end
 		end
+
+		time = os.time()
 
 		for i, group in ipairs(sections) do
 			for j, section in ipairs(group) do
