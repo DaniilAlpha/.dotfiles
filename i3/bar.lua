@@ -258,11 +258,11 @@ end
 ---@field [integer] string
 
 ---@class Section
----@field source number|Pipe
+---@field source number|Pipe?
 Section = {}
 Section.__index = Section
 
----@param source number|Pipe
+---@param source number|Pipe?
 ---@return Section
 function Section:new(source)
 	local s = setmetatable({}, self)
@@ -477,29 +477,31 @@ function brightness_pipe:transform(line)
 end
 
 local statscore_pipe = Pipe:new_of_unix_socket("/run/user/10000/statscore.sock")
----@return table?, string?
-function statscore_pipe:transform(line)
-	local env = {}
+if statscore_pipe then
+	---@return table?, string?
+	function statscore_pipe:transform(line)
+		local env = {}
 
-	---@type function?, string?
-	local get, err
-	if setfenv then
-		get, err = loadstring(line)
-		get = get and setfenv(get, env)
-	else
-		get, err = load(line, nil, nil, env)
-	end
-	if not get then
-		return nil, err
-	end
+		---@type function?, string?
+		local get, err
+		if setfenv then
+			get, err = loadstring(line)
+			get = get and setfenv(get, env)
+		else
+			get, err = load(line, nil, nil, env)
+		end
+		if not get then
+			return nil, err
+		end
 
-	local ok, res = pcall(get)
-	if not ok then
-		return nil, res
-	end
-	---@cast res table
+		local ok, res = pcall(get)
+		if not ok then
+			return nil, res
+		end
+		---@cast res table
 
-	return res
+		return res
+	end
 end
 
 --- sections ---
