@@ -3,6 +3,7 @@ table.pack = table.pack or function(...)
 	return { n = select("#", ...), ... }
 end
 local posix = require("posix")
+local socket = require("posix.sys.socket")
 
 local USE_PANGO = true
 local DEFAULT_PREFIX = "<span font_features='tnum'>"
@@ -129,33 +130,59 @@ end
 
 --- pipe ---
 
----@alias PosixFile table
-
 ---@class Pipe
----@field _file PosixFile
+---@field _fd integer
 ---@field _buf string[]
----@field _is_ppipe boolean
 Pipe = {}
 Pipe.__index = Pipe
 
----@param cmd string
----@return Pipe
-function Pipe:new(cmd)
-	if type(cmd) == "string" then
-		cmd = posix.popen({ "sh", "-c", cmd }, "r")
+---@param path string
+---@return Pipe?, string?
+function Pipe:new_of_unix_socket(path)
+	local fd, err = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0)
+	if not fd then
+		return nil, err
 	end
 
+	local ok
+	ok, err = socket.connect(fd, { family = socket.AF_UNIX, path = path })
+	if not ok then
+		posix.unistd.close(fd)
+		return nil, err
+	end
+
+	posix.fcntl.fcntl(fd, posix.fcntl.F_SETFL, posix.fcntl.fcntl(fd, posix.fcntl.F_GETFL) + posix.fcntl.O_NONBLOCK)
+
+	---@type Pipe
+	local s = setmetatable({}, self)
+	s._buf = {}
+	s._fd = fd
+	function s._close()
+		posix.unistd.close(fd)
+		return true
+	end
+	return s
+end
+
+---@param cmd string
+---@return Pipe
+function Pipe:new_of_cmd(cmd)
+	local ppipe = posix.popen({ "sh", "-c", cmd }, "r")
+
 	posix.fcntl.fcntl(
-		cmd.fd,
+		ppipe.fd,
 		posix.fcntl.F_SETFL,
-		posix.fcntl.fcntl(cmd.fd, posix.fcntl.F_GETFL) + posix.fcntl.O_NONBLOCK
+		posix.fcntl.fcntl(ppipe.fd, posix.fcntl.F_GETFL) + posix.fcntl.O_NONBLOCK
 	)
 
 	---@type Pipe
 	local s = setmetatable({}, self)
-	s._file = cmd
 	s._buf = {}
-	s._is_ppipe = true -- TODO might not be the case in the future
+	s._fd = ppipe.fd
+	function s._close()
+		local reason, code = posix.pclose(ppipe)
+		return reason == "exited" and code == 0, reason, code
+	end
 	return s
 end
 
@@ -170,7 +197,7 @@ end
 function Pipe:read()
 	while true do
 		---@type string
-		local str, err, errno = posix.unistd.read(self._file.fd, 4096)
+		local str, err, errno = posix.unistd.read(self._fd, 4096)
 		if not str then
 			return nil, (errno ~= posix.errno.EWOULDBLOCK or nil) and err
 		end
@@ -192,13 +219,6 @@ end
 
 ---@return boolean, string?, integer?
 function Pipe:_close()
-	if self._is_ppipe then
-		local reason, code = posix.pclose(self._file)
-		if reason ~= "exited" or code ~= 0 then
-			return false, reason, code
-		end
-	end
-
 	return true
 end
 
@@ -213,7 +233,7 @@ local function poll_pipes(pipes, timeout)
 	---@type table
 	local fds = {}
 	for _, pipe in pairs(pipes) do
-		fds[pipe._file.fd] = { events = { IN = true, HUP = true, ERR = true, NVAL = true }, pipe = pipe }
+		fds[pipe._fd] = { events = { IN = true, HUP = true, ERR = true, NVAL = true }, pipe = pipe }
 	end
 
 	---@type {[Pipe]: boolean}, {[Pipe]: boolean}, {[Pipe]: boolean}
@@ -415,7 +435,7 @@ end
 
 --- pipes ---
 
-local updates_count_pipe = Pipe:new([[
+local updates_count_pipe = Pipe:new_of_cmd([[
 	get-updates-count() { cat /tmp/update_checker_count; }
 
 	get-updates-count
@@ -429,7 +449,7 @@ function updates_count_pipe:transform(line)
 	return tonumber(line)
 end
 
-local volume_pipe = Pipe:new([[
+local volume_pipe = Pipe:new_of_cmd([[
 	get-volume-and-muted() {
 		volume=$(pactl get-sink-volume @DEFAULT_SINK@ | cut -F5)
 		mute=$(pactl get-sink-mute @DEFAULT_SINK@)
@@ -447,7 +467,7 @@ function volume_pipe:transform(line)
 	return volume, mute and mute == "yes"
 end
 
-local brightness_pipe = Pipe:new([[
+local brightness_pipe = Pipe:new_of_cmd([[
 	script -qc "udevadm monitor --udev --subsystem-match=backlight" /dev/null | while read -r _; do
 		echo $(( 100 * $(brightnessctl g) / $(brightnessctl m) ))
 	done
@@ -457,12 +477,7 @@ function brightness_pipe:transform(line)
 	return tonumber(line)
 end
 
-local statscore_pipe = Pipe:new([[
-	while :; do 
-		cat /run/user/10000/statscore.lua && printf "\n"
-		inotifyd echo /run/user/10000/statscore.lua:x &> /dev/null
-	done
-]])
+local statscore_pipe = Pipe:new_of_unix_socket("/run/user/10000/statscore.sock")
 ---@return table?, string?
 function statscore_pipe:transform(line)
 	local env = {}
