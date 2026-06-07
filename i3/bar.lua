@@ -655,8 +655,13 @@ function net:format(statscore, _)
 		tostring_si(combo_val * 8, "bps"),
 	}
 end
+local text = Section:new(Pipe:new_of_cmd("echo hello world"))
+function text:format(line)
+	return {line}
+end
 
 return bar_run({
+	{text},
 	{ net },
 	{ temp },
 	{ bat },
