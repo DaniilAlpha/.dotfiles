@@ -643,7 +643,7 @@ function net:format(statscore, _)
 	}
 end
 
-local text = Section:new(Pipe:new_of_cmd("echo hello world"))
+local text = Section:new(Pipe:new_of_cmd("echo hello, $(whoami)"))
 function text:format(line)
 	return { line }
 end
