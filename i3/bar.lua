@@ -159,7 +159,7 @@ function Pipe:new_of_unix_socket(path)
 	s._fd = fd
 	function s._close()
 		posix.unistd.close(fd)
-		return true
+		return false -- assuming socket should not disconnect normally
 	end
 	return s
 end
@@ -181,7 +181,7 @@ function Pipe:new_of_cmd(cmd)
 	s._fd = ppipe.fd
 	function s._close()
 		local reason, code = posix.pclose(ppipe)
-		return reason == "exited" and code == 0, reason, code
+		return reason == "exited" and code == 0
 	end
 	return s
 end
@@ -221,7 +221,7 @@ function Pipe:read()
 	end
 end
 
----@return boolean, string?, integer?
+---@return boolean
 function Pipe:_close()
 	return true
 end
@@ -370,7 +370,8 @@ local function bar_run(sections)
 				else
 					local closed_successfully = pipe:_close()
 					pipes[i] = nil
-					crashed_pipes[pipe] = true --err ~= "eof"
+
+					crashed_pipes[pipe] = err ~= "eof" or not closed_successfully
 				end
 			end
 		end
