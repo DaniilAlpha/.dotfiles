@@ -193,13 +193,16 @@ function Pipe:transform(line)
 end
 
 ---@return {[integer]: any, n: integer}? data_table list, containing data returned by the pipe's `_transform` function, or `nil` if unavailable
----@return string? err error message in case of some failure (except EWOULDBLOCK)
+---@return "eof"|"again"|string? err status indicator (in case reading was unsuccessful) or error message
 function Pipe:read()
 	while true do
 		---@type string
 		local str, err, errno = posix.unistd.read(self._fd, 4096)
 		if not str then
-			return nil, (errno ~= posix.errno.EWOULDBLOCK or nil) and err
+			return nil, (errno == posix.errno.EAGAIN or errno == posix.errno.EWOULDBLOCK) and "again" or err
+		end
+		if str == "" then
+			return nil, "eof"
 		end
 
 		local linebreak_start, linebreak_end = str:find("%s*\n%s*")
@@ -213,6 +216,7 @@ function Pipe:read()
 			return table.pack(self:transform(table.concat(old_buf)))
 		else
 			self._buf[#self._buf + 1] = str
+			return nil, "again"
 		end
 	end
 end
@@ -226,9 +230,7 @@ end
 
 ---@param pipes Pipe[]
 ---@param timeout number? - in seconds
----@return {[Pipe]: boolean} nonempty_pipes contains pipes that have any data in them
----@return {[Pipe]: boolean} closed_pipes contains all pipes that will no longer return data (including crashed ones)
----@return {[Pipe]: boolean} crashed_pipes contains only pipes that had some kind of error, or exited with non-0 code
+---@return {[Pipe]: boolean}
 local function poll_pipes(pipes, timeout)
 	---@type table
 	local fds = {}
@@ -236,28 +238,17 @@ local function poll_pipes(pipes, timeout)
 		fds[pipe._fd] = { events = { IN = true, HUP = true, ERR = true, NVAL = true }, pipe = pipe }
 	end
 
-	---@type {[Pipe]: boolean}, {[Pipe]: boolean}, {[Pipe]: boolean}
-	local nonempty_pipes, closed_pipes, crashed_pipes = {}, {}, {}
+	---@type {[Pipe]: boolean}
+	local nonempty_pipes = {}
 
 	local count = posix.poll.poll(fds, timeout and timeout * 1000)
 	if count > 0 then
 		for _, info in pairs(fds) do
-			if info.revents.ERR or info.revents.NVAL then
-				closed_pipes[info.pipe] = true
-			elseif info.revents.IN then
-				nonempty_pipes[info.pipe] = true
-			elseif info.revents.HUP then
-				closed_pipes[info.pipe] = true
-			end
-
-			if closed_pipes[info.pipe] then
-				local ok = info.pipe:_close()
-				crashed_pipes[info.pipe] = not ok
-			end
+			nonempty_pipes[info.pipe] = info.revents.IN or info.revents.HUP or info.revents.ERR or info.revents.NVAL
 		end
 	end
 
-	return nonempty_pipes, closed_pipes, crashed_pipes
+	return nonempty_pipes
 end
 
 --- section ---
@@ -357,6 +348,7 @@ local function bar_run(sections)
 	while true do
 		time = os.time()
 
+		-- TODO probably will crash from passing math.huge (a float) to poll() when no periodic sections are set up
 		local closest_rem_time = math.huge
 		for _, period in pairs(periods) do
 			local rem_time = period - time % period
@@ -365,14 +357,21 @@ local function bar_run(sections)
 			end
 		end
 
-		local nonempty_pipes, closed_pipes, crashed_pipes = poll_pipes(pipes, closest_rem_time)
+		---@type {[Pipe]: boolean}, {[Pipe]: boolean}
+		local nonempty_pipes, crashed_pipes = poll_pipes(pipes, closest_rem_time), {}
 
 		local pipe_datas = {}
 		for i, pipe in pairs(pipes) do
-			if closed_pipes[pipe] then
-				pipes[i] = nil
-			elseif nonempty_pipes[pipe] then
-				pipe_datas[pipe] = pipe:read() or pipe_datas[pipe]
+			if nonempty_pipes[pipe] then
+				local data, err = pipe:read()
+				if data then
+					pipe_datas[pipe] = data or pipe_datas[pipe]
+				elseif err == "again" then
+				else
+					local closed_successfully = pipe:_close()
+					pipes[i] = nil
+					crashed_pipes[pipe] = true --err ~= "eof"
+				end
 			end
 		end
 
