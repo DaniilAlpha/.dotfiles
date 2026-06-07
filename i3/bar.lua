@@ -137,19 +137,10 @@ Pipe = {}
 Pipe.__index = Pipe
 
 ---@param path string
----@return Pipe?, string?
+---@return Pipe
 function Pipe:new_of_unix_socket(path)
-	local fd, err = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0)
-	if not fd then
-		return nil, err
-	end
-
-	local ok
-	ok, err = socket.connect(fd, { family = socket.AF_UNIX, path = path })
-	if not ok then
-		posix.unistd.close(fd)
-		return nil, err
-	end
+	local fd = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0) or -1
+	socket.connect(fd, { family = socket.AF_UNIX, path = path })
 
 	posix.fcntl.fcntl(fd, posix.fcntl.F_SETFL, posix.fcntl.fcntl(fd, posix.fcntl.F_GETFL) + posix.fcntl.O_NONBLOCK)
 
@@ -168,17 +159,14 @@ end
 ---@return Pipe
 function Pipe:new_of_cmd(cmd)
 	local ppipe = posix.popen({ "sh", "-c", cmd }, "r")
+	local fd = ppipe.fd
 
-	posix.fcntl.fcntl(
-		ppipe.fd,
-		posix.fcntl.F_SETFL,
-		posix.fcntl.fcntl(ppipe.fd, posix.fcntl.F_GETFL) + posix.fcntl.O_NONBLOCK
-	)
+	posix.fcntl.fcntl(fd, posix.fcntl.F_SETFL, posix.fcntl.fcntl(fd, posix.fcntl.F_GETFL) + posix.fcntl.O_NONBLOCK)
 
 	---@type Pipe
 	local s = setmetatable({}, self)
 	s._buf = {}
-	s._fd = ppipe.fd
+	s._fd = fd
 	function s._close()
 		local reason, code = posix.pclose(ppipe)
 		return reason == "exited" and code == 0
@@ -258,11 +246,11 @@ end
 ---@field [integer] string
 
 ---@class Section
----@field source number|Pipe?
+---@field source number|Pipe
 Section = {}
 Section.__index = Section
 
----@param source number|Pipe?
+---@param source number|Pipe
 ---@return Section
 function Section:new(source)
 	local s = setmetatable({}, self)
@@ -478,31 +466,29 @@ function brightness_pipe:transform(line)
 end
 
 local statscore_pipe = Pipe:new_of_unix_socket("/run/user/10000/statscore.sock")
-if statscore_pipe then
-	---@return table?, string?
-	function statscore_pipe:transform(line)
-		local env = {}
+---@return table?, string?
+function statscore_pipe:transform(line)
+	local env = {}
 
-		---@type function?, string?
-		local get, err
-		if setfenv then
-			get, err = loadstring(line)
-			get = get and setfenv(get, env)
-		else
-			get, err = load(line, nil, nil, env)
-		end
-		if not get then
-			return nil, err
-		end
-
-		local ok, res = pcall(get)
-		if not ok then
-			return nil, res
-		end
-		---@cast res table
-
-		return res
+	---@type function?, string?
+	local get, err
+	if setfenv then
+		get, err = loadstring(line)
+		get = get and setfenv(get, env)
+	else
+		get, err = load(line, nil, nil, env)
 	end
+	if not get then
+		return nil, err
+	end
+
+	local ok, res = pcall(get)
+	if not ok then
+		return nil, res
+	end
+	---@cast res table
+
+	return res
 end
 
 --- sections ---
@@ -656,13 +642,14 @@ function net:format(statscore, _)
 		tostring_si(combo_val * 8, "bps"),
 	}
 end
+
 local text = Section:new(Pipe:new_of_cmd("echo hello world"))
 function text:format(line)
-	return {line}
+	return { line }
 end
 
 return bar_run({
-	{text},
+	{ text },
 	{ net },
 	{ temp },
 	{ bat },
