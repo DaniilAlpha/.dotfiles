@@ -197,7 +197,7 @@ local function poll_pipes(pipes, timeout)
 	---@type table
 	local fds = {}
 	for _, pipe in pairs(pipes) do
-		fds[pipe._file.fd] = { pipe = pipe, events = { IN = true, HUP = true, ERR = true, NVAL = true }, revents = {} }
+		fds[pipe._file.fd] = { events = { IN = true, HUP = true, ERR = true, NVAL = true }, pipe = pipe }
 	end
 
 	---@type {[Pipe]: boolean}, {[Pipe]: boolean}
