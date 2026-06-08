@@ -3,6 +3,7 @@ table.pack = table.pack or function(...)
 	return { n = select("#", ...), ... }
 end
 local posix = require("posix")
+local bit = require("bit")
 local socket = require("posix.sys.socket")
 
 local USE_PANGO = true
@@ -136,18 +137,30 @@ end
 Pipe = {}
 Pipe.__index = Pipe
 
+---@param fd integer
+---@return Pipe
+function Pipe:new(fd)
+	if fd ~= 0 then
+		posix.fcntl.fcntl(
+			fd,
+			posix.fcntl.F_SETFL,
+			bit.bor(posix.fcntl.fcntl(fd, posix.fcntl.F_GETFL), posix.fcntl.O_NONBLOCK)
+		)
+	end
+
+	local s = setmetatable({}, self)
+	s._buf = {}
+	s._fd = fd
+	return s
+end
+
 ---@param path string
 ---@return Pipe
 function Pipe:new_of_unix_socket(path)
 	local fd = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM, 0) or -1
 	socket.connect(fd, { family = socket.AF_UNIX, path = path })
 
-	posix.fcntl.fcntl(fd, posix.fcntl.F_SETFL, posix.fcntl.fcntl(fd, posix.fcntl.F_GETFL) + posix.fcntl.O_NONBLOCK)
-
-	---@type Pipe
-	local s = setmetatable({}, self)
-	s._buf = {}
-	s._fd = fd
+	local s = Pipe:new(fd)
 	function s._close()
 		posix.unistd.close(fd)
 		return false -- assuming socket should not disconnect normally
@@ -159,14 +172,8 @@ end
 ---@return Pipe
 function Pipe:new_of_cmd(cmd)
 	local ppipe = posix.popen({ "sh", "-c", cmd }, "r")
-	local fd = ppipe.fd
 
-	posix.fcntl.fcntl(fd, posix.fcntl.F_SETFL, posix.fcntl.fcntl(fd, posix.fcntl.F_GETFL) + posix.fcntl.O_NONBLOCK)
-
-	---@type Pipe
-	local s = setmetatable({}, self)
-	s._buf = {}
-	s._fd = fd
+	local s = Pipe:new(ppipe.fd)
 	function s._close()
 		local reason, code = posix.pclose(ppipe)
 		return reason == "exited" and code == 0
@@ -228,7 +235,6 @@ local function poll_pipes(pipes, timeout)
 
 	---@type {[Pipe]: boolean}
 	local nonempty_pipes = {}
-
 	local count = posix.poll.poll(fds, timeout and timeout * 1000)
 	if count > 0 then
 		for _, info in pairs(fds) do
@@ -269,11 +275,12 @@ function Section:content(args)
 	return self:format(table.unpack(args, nil, args.n)) or {}
 end
 
+---@param id string
 ---@param text string
 ---@param color string?
 ---@param do_show_sep boolean?
 ---@return string
-local function section_render_tojson(text, color, do_show_sep)
+local function section_render_tojson(id, text, color, do_show_sep)
 	---@param s string?
 	---@return string
 	local function string_or_nil_tojson(s)
@@ -282,7 +289,8 @@ local function section_render_tojson(text, color, do_show_sep)
 	end
 
 	return string.format(
-		'{"full_text": %s, "color": %s, "markup": %s, "separator_block_width": %d, "separator": %s}',
+		'{"name": %s, "full_text": %s, "color": %s, "markup": %s, "separator_block_width": %d, "separator": %s}',
+		string_or_nil_tojson(id),
 		string_or_nil_tojson(text),
 		string_or_nil_tojson(color),
 		string_or_nil_tojson((USE_PANGO or nil) and "pango"),
@@ -299,8 +307,20 @@ local function bar_run(sections)
 	io.write("[", "\n")
 	io.flush()
 
+	-- io.stdin:setvbuf("no")
+	-- local inputs_pipe = Pipe:new(0)
+	-- ---@return {name: string}
+	-- function inputs_pipe:transform(line)
+	-- 	local i, j = line:match('"name":%s*"(%d+),(%d+)"')
+	-- 	return {
+	-- 		i = i,
+	-- 		j = j,
+	-- 	}
+	-- end
+
 	---@type {[integer]: Pipe}, integer[]
-	local pipes, periods = {}, {}
+	local pipes, periods = { --[[inputs_pipe]]
+	}, {}
 	for _, group in pairs(sections) do
 		for _, section in pairs(group) do
 			local source = section.source
@@ -353,7 +373,7 @@ local function bar_run(sections)
 			if nonempty_pipes[pipe] then
 				local data, err = pipe:read()
 				if data then
-					pipe_datas[pipe] = data or pipe_datas[pipe]
+					pipe_datas[pipe] = data
 				elseif err == "again" then
 				else
 					local closed_successfully = pipe:_close()
@@ -391,13 +411,14 @@ local function bar_run(sections)
 			end
 		end
 
-		---@type {text: string, color: string?, do_show_sep?: boolean}[]
+		---@type {id: string, text: string, color: string?, do_show_sep?: boolean}[]
 		local renders = {}
-		for _, group in ipairs(contents) do
-			for _, content in ipairs(group) do
+		for i, group in ipairs(contents) do
+			for j, content in ipairs(group) do
 				renders[#renders + 1] = content
 					and (#content > 0 or nil)
 					and {
+						id = i .. "," .. j,
 						text = DEFAULT_PREFIX .. table.concat(content, " ") .. DEFAULT_POSTFIX,
 						color = content.color and content.color:match("^#%x%x%x%x%x%x%x?%x?$"),
 					}
@@ -410,7 +431,7 @@ local function bar_run(sections)
 		---@type string[]
 		local jsons = {}
 		for _, render in ipairs(renders) do
-			jsons[#jsons + 1] = section_render_tojson(render.text, render.color, render.do_show_sep)
+			jsons[#jsons + 1] = section_render_tojson(render.id, render.text, render.color, render.do_show_sep)
 		end
 		io.write("[" .. table.concat(jsons, ",") .. "],", "\n")
 		io.flush()

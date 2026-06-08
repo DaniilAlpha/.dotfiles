@@ -49,8 +49,6 @@ exec --no-startup-id dex --autostart --environment i3
 exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork
 # NetworkManager applet
 exec --no-startup-id nm-applet
-# NetworkManager applet
-exec --no-startup-id cd ~/.scripts/statscored/ && exec ./statscored
 
 
 ##################
