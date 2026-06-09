@@ -228,7 +228,7 @@ bindsym $mod+Ctrl+r mode "resize"
 ###########
 
 bar {
-    status_command cd ~/.config/i3/ && ./luasections
+    status_command i3unblocks
 
 	font pango:sans-serif bold 8
 
