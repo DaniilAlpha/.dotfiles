@@ -18,12 +18,12 @@ local RISK_COLORS = { nil, nil, nil, nil, nil, nil, nil, nil, "#F27835", "#F2353
 ---@param t table?
 ---@param ... any
 function table.get_in(t, ...)
-	for _, key in pairs({ ... }) do
-		if t ~= nil then
-			t = t[key]
-		else
-			break
+	local keys = table.pack(...)
+	for i = 1, keys.n do
+		if t == nil then
+			return
 		end
+		t = t[keys[i]]
 	end
 	return t
 end
@@ -140,13 +140,11 @@ Pipe.__index = Pipe
 ---@param fd integer
 ---@return Pipe
 function Pipe:new(fd)
-	if fd ~= 0 then
-		posix.fcntl.fcntl(
-			fd,
-			posix.fcntl.F_SETFL,
-			bit.bor(posix.fcntl.fcntl(fd, posix.fcntl.F_GETFL), posix.fcntl.O_NONBLOCK)
-		)
-	end
+	posix.fcntl.fcntl(
+		fd,
+		posix.fcntl.F_SETFL,
+		bit.bor(posix.fcntl.fcntl(fd, posix.fcntl.F_GETFL), posix.fcntl.O_NONBLOCK)
+	)
 
 	local s = setmetatable({}, self)
 	s._buf = {}
@@ -307,20 +305,17 @@ local function bar_run(sections)
 	io.write("[", "\n")
 	io.flush()
 
-	-- io.stdin:setvbuf("no")
-	-- local inputs_pipe = Pipe:new(0)
-	-- ---@return {name: string}
-	-- function inputs_pipe:transform(line)
-	-- 	local i, j = line:match('"name":%s*"(%d+),(%d+)"')
-	-- 	return {
-	-- 		i = i,
-	-- 		j = j,
-	-- 	}
-	-- end
+	-- io.stdin:setvbuf("line")
+	local inputs_pipe = Pipe:new(0)
+	---@return {i: integer, j: integer}
+	function inputs_pipe:transform(line)
+		---@type string?, string?
+		local i_str, j_str = line:match('"name":%s*"(%d+),(%d+)"')
+		return { i = tonumber(i_str), j = tonumber(j_str) }
+	end
 
 	---@type {[integer]: Pipe}, integer[]
-	local pipes, periods = { --[[inputs_pipe]]
-	}, {}
+	local pipes, periods = { inputs_pipe }, {}
 	for _, group in pairs(sections) do
 		for _, section in pairs(group) do
 			local source = section.source
@@ -411,6 +406,15 @@ local function bar_run(sections)
 			end
 		end
 
+		if nonempty_pipes[inputs_pipe] then
+			local inputs_pipe_data = pipe_datas[inputs_pipe]
+			local event = table.unpack(inputs_pipe_data, nil, inputs_pipe_data.n)
+			local xyzzy = table.get_in(contents, tonumber(event.i), tonumber(event.j))
+			if xyzzy then
+				xyzzy.color = "#00FFFF"
+			end
+		end
+
 		---@type {id: string, text: string, color: string?, do_show_sep?: boolean}[]
 		local renders = {}
 		for i, group in ipairs(contents) do
@@ -472,12 +476,13 @@ local volume_pipe = Pipe:new_of_cmd([[
 ]])
 ---@return integer?, boolean?
 function volume_pipe:transform(line)
-	local volume, mute = line:match("^(%d+)%s*(%w+)$")
-	return volume, mute and mute == "yes"
+	---@type string?, string?
+	local volume_str, mute = line:match("^(%d+)%s*(%w+)$")
+	return tonumber(volume_str), mute and mute == "yes"
 end
 
 local brightness_pipe = Pipe:new_of_cmd([[
-	script -qc "udevadm monitor --udev --subsystem-match=backlight" /dev/null | while read -r _; do
+	script -qc "udevadm monitor --udev --subsystem-match=backlight" /dev/null < /dev/null | while read -r _; do
 		echo $(( 100 * $(brightnessctl g) / $(brightnessctl m) ))
 	done
 ]])
