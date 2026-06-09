@@ -239,7 +239,7 @@ bar {
 		statusline  $col-onback
         separator   $col-secn
 
-		#name			border		back		on back
+		#name               border      back        on back
 		focused_workspace	$col-prim	$col-prim	$col-onprim
 		active_workspace	$col-secn	$col-back	$col-onback
 		inactive_workspace	$col-back	$col-back	$col-onback
