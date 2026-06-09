@@ -1,0 +1,87 @@
+#!/usr/bin/luajit
+
+table.unpack = table.unpack or unpack
+table.pack = table.pack or function(...)
+	return { n = select("#", ...), ... }
+end
+local Pipe = require("pipe")
+local Section = require("section")
+local Bar = require("bar")
+
+---@param t table?
+---@param ... any
+function table.get_in(t, ...)
+	local keys = table.pack(...)
+	for i = 1, keys.n do
+		if t == nil then
+			return
+		end
+		t = t[keys[i]]
+	end
+	return t
+end
+
+-----------------
+--- constants ---
+-----------------
+
+HOME_DIR_PATH = os.getenv("HOME") or "~"
+CONFIG_PATHS = {
+	HOME_DIR_PATH .. "/.config/i3/config.lua",
+	os.getenv("LUASECTIONS_CONFIG") or (HOME_DIR_PATH .. "/.config/luasections/config.lua"),
+	"/etc/luasections/config.lua",
+}
+
+USE_PANGO = true
+DEFAULT_PREFIX = "<span font_features='tnum'>"
+DEFAULT_POSTFIX = "</span>"
+
+GROUP_SEP_WIDTH = 30
+SEP_WIDTH = 10
+
+RISK_COLORS = { nil, nil, nil, nil, nil, nil, nil, nil, "#F27835", "#F23535" }
+
+---@param paths string[]
+---@return Section[][]?, string?
+local function load_config(paths)
+	---@type function?, string?
+	local get, err
+	for _, path in pairs(paths) do
+		local env = setmetatable({
+			print = function(...)
+				io.stderr:write(..., "\n")
+			end,
+
+			-- TODO try excluding `os.execute` as it writes to stdout
+
+			-- injected cusom API
+			Pipe = Pipe,
+			Section = Section,
+		}, { __index = _G })
+
+		if setfenv then
+			get, err = loadfile(path)
+			get = get and setfenv(get, env)
+		else
+			get, err = loadfile(path, nil, env)
+		end
+
+		if get then
+			break
+		end
+	end
+	if not get then
+		return nil, err
+	end
+
+	local ok, res = pcall(get)
+	if not ok then
+		return nil, res
+	end
+
+	return res
+end
+
+local config = assert(load_config(CONFIG_PATHS))
+
+return Bar.run(config)

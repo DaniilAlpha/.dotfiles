@@ -228,7 +228,7 @@ bindsym $mod+Ctrl+r mode "resize"
 ###########
 
 bar {
-    status_command luajit ~/.config/i3/bar.lua
+    status_command cd ~/.config/i3/ && ./luasections
 
 	font pango:sans-serif bold 8
 
