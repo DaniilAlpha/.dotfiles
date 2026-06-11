@@ -1,3 +1,22 @@
+---@param t table?
+---@param ... any
+function table.get_in(t, ...)
+	local keys = table.pack(...)
+	for i = 1, keys.n do
+		if t == nil then
+			return
+		end
+		t = t[keys[i]]
+	end
+	return t
+end
+
+-----------------
+--- constants ---
+-----------------
+
+RISK_COLORS = { nil, nil, nil, nil, nil, nil, nil, nil, "#F27835", "#F23535" }
+
 ------------------
 --- formatters ---
 ------------------
@@ -255,12 +274,11 @@ local bat = Section:new(statscore_pipe)
 function bat:format(statscore, _)
 	---@alias BatStats Stats<{charge: integer, rate: number}>
 	---@type BatStats?, {[string]: BatStats}?
-	local combo = table.get_in(statscore, "bat")
+	local combo, is_charging = table.get_in(statscore, "bat"), table.get_in(statscore, "is_charging")
 	if not combo then
 		return
 	end
 
-	local is_charging = combo.value.rate >= 0
 	local remain_time = (is_charging and (100 - combo.value.charge) or -combo.value.charge) / combo.value.rate
 
 	return {
