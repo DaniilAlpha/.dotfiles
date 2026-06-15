@@ -50,6 +50,24 @@ exec --no-startup-id xss-lock --transfer-sleep-lock -- i3lock --nofork
 # NetworkManager applet
 exec --no-startup-id nm-applet
 
+####################
+### window rules ###
+####################
+
+exec --no-startup-id sh -c 'while pgrep -u "$USER" -x i3 > /dev/null; do \
+    yad --calendar                      \
+    --title="popup-calendar"            \
+    --no-buttons --undecorated          \
+    --close-on-unfocus                  \
+    ; done'
+for_window [title="popup-calendar"]     \
+    floating enable,                    \
+    sticky enable,                      \
+    border pixel 1,                     \
+    resize set 250px 200px,             \
+    move position mouse,                \
+    move scratchpad
+
 
 ##################
 ### workspaces ###
@@ -228,7 +246,7 @@ bindsym $mod+Ctrl+r mode "resize"
 ###########
 
 bar {
-    status_command i3unblocks
+    status_command i3unblocks 2> /tmp/i3unblocks_stderr
 
 	font pango:sans-serif bold 8
 

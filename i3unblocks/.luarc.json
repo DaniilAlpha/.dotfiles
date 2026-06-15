@@ -1,6 +1,7 @@
 {
     "diagnostics.globals": [
         "Pipe",
-        "Section"
+        "Section",
+        "execute"
     ]
 }

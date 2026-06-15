@@ -200,11 +200,22 @@ local clock = Section:new(60)
 function clock:format(time)
 	return { "󰃭", os.date("%d %b · %H:%M", time) }
 end
+function clock:on_click()
+	execute("i3-msg", '[title="popup-calendar"] scratchpad show, move position mouse')
+end
 
 local updates_count = Section:new(updates_count_pipe)
 ---@param value integer?
 function updates_count:format(value)
 	return value and (value > 0 or nil) and { "󰑐", tostring(value) }
+end
+function updates_count:on_click()
+	execute(
+		"i3-sensible-terminal",
+		"--title=System Upgrade",
+		"-e",
+		"bash -ic 'upgrade && echo && echo Upgrade was successfull!; read'"
+	)
 end
 
 local volume = Section:new(volume_pipe)
