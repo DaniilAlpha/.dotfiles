@@ -332,6 +332,31 @@ function temp:format(statscore, _)
 		}
 end
 
+local cooler = Section:new(statscore_pipe)
+---@param statscore table?
+function cooler:format(statscore, _)
+	---@type {[string]: Stats<integer>}?
+	local coolers = table.get_in(statscore, "coolers")
+	if not coolers then
+		return
+	end
+
+	local _, max_cooler = next(coolers)
+	for _, v in pairs(coolers) do
+		if max_cooler and max_cooler.risk < v.risk then
+			max_cooler = v
+		end
+	end
+
+	return max_cooler
+		and {
+			color = rank_strs(max_cooler.risk, RISK_COLORS),
+
+			rank_strs(max_cooler.risk, { "󰠝", "󱑲", "󱑳", "󱑴", "󱪂" }),
+			max_cooler.value,
+		}
+end
+
 local net = Section:new(statscore_pipe)
 ---@param statscore table?
 function net:format(statscore, _)
@@ -363,7 +388,7 @@ end
 return {
 	{ text },
 	{ net },
-	{ temp },
+	{ cooler, temp },
 	{ bat },
 	{ cpu, mem, disk },
 	{ brightness, volume, updates_count, clock },
