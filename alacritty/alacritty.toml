@@ -1,6 +1,9 @@
 [general]
 import = ["~/.config/alacritty/themes/everforest-dark.toml"]
 
+[colors.primary]
+background = "#181818"
+
 [window]
 # dynamic_padding = true
 dimensions = { columns = 80, lines = 25 }
@@ -8,8 +11,8 @@ dimensions = { columns = 80, lines = 25 }
 # blur = true
 
 [font]
-normal.family = "JetBrainsMono NerdFont" 
-size = 10
+normal.family = "JetBrainsMono NL" 
+size = 10 
 builtin_box_drawing = false
 
 [scrolling]
