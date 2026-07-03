@@ -33,7 +33,7 @@ alias sv=svi
 alias g='git'
 alias gs='g status'
 alias ga='g add . && gs'
-alias gc='read -re -p "-m: " message && g commit -m"$message"'
+alias gc='message="" && vared -p"-m: " message && g commit -m"$message"'
 alias gp='g push'
 alias gpl='g pull'
 alias gacp='ga && gc . && gp'
