@@ -24,9 +24,11 @@ alias chmod='chmod --preserve-root'
 alias chgrp='chgrp --preserve-root'
 
 alias pacman='sudo pacman'
-alias vi='vim'
+alias vim='nvim'
+alias vi=vim
 alias v=vi
-alias svim='EDITOR=vim sudoedit'
+alias snvim='EDITOR=nvim sudoedit'
+alias svim=snvim
 alias svi=svim
 alias sv=svi
 
@@ -36,7 +38,7 @@ alias ga='g add . && gs'
 alias gc='message="" && vared -p"-m: " message && g commit -m"$message"'
 alias gp='g push'
 alias gpl='g pull'
-alias gacp='ga && gc . && gp'
+alias gacp='ga && g commit -m. && gp'
 
 ### direnv ###
 

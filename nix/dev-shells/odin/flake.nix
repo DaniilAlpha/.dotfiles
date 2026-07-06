@@ -14,7 +14,7 @@
     {
       devShells.${system} = {
         default = pkgs.mkShell {
-          buildinputs = [
+          packages = [
             pkgs.odin
             pkgs.ols
           ];
