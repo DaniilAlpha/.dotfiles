@@ -1,29 +1,22 @@
 {
-  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/master/doc/json_schema.json",
-  "modules": [
-    "title",
-
-    "separator",
-
-    "os",
-    "kernel",
-    "packages",
-    "de",
-    "wm",
-
-    "separator",
-
-    "host",
-    "cpu",
-    "gpu",
-    "display",
-    "memory",
-    "swap",
-    "disk",
-    "localip",
-    "battery",
-    "poweradapter",
-
-    "break"
-  ]
+    "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/master/doc/json_schema.json",
+    "modules": [
+        "title",
+        "separator",
+        "os",
+        "kernel",
+        "packages",
+        "de",
+        "separator",
+        "cpu",
+        "gpu",
+        "display",
+        "memory",
+        "swap",
+        "disk",
+        "localip",
+        "battery",
+        "poweradapter",
+        "break"
+    ]
 }
