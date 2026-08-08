@@ -22,11 +22,11 @@
       devShells.${system} = {
         esp32 = pkgs.mkShell {
           inputsFrom = [ esp32-pkgs.devShells.${system}.esp-idf-full ];
-          buildinputs = [ pkgs.llvmPackages.clang-tools ];
+          #buildInputs = [ pkgs.llvmPackages.clang-tools ];
         };
         esp8266 = pkgs.mkShell {
           inputsFrom = [ esp8266-pkgs.devShells.${system}.esp8266-rtos-sdk ];
-          buildinputs = [ pkgs.llvmPackages.clang-tools ];
+          buildInputs = [ pkgs.llvmPackages.clang-tools ];
         };
       };
     };
