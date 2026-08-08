@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    esp32-pkgs.url = "github:mirrexagon/nixpkgs-esp-dev";
+    esp32-pkgs.url = "github:dvdvgt/nixpkgs-esp-dev/update-v6.0.1";
     esp8266-pkgs.url = "github:DaniilAlpha/nixpkgs-esp-dev-esp8266-fix";
   };
 
